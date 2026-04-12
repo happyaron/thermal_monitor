@@ -1,0 +1,25 @@
+sources:
+  - name: "Test Source"
+    type: local_sensors
+    enabled: true
+    warn: 40
+    crit: 55
+
+  - name: "Disabled Source"
+    type: local_sensors
+    enabled: false
+    warn: 40
+    crit: 55
+
+alerting:
+  mode: webhook
+  alert_cooldown: 300
+  mention_all_on_crit: true
+  state_file: "/tmp/test_thermal_state.json"
+
+settings:
+  max_workers: 0
+  jitter: 0.0
+
+logging:
+  retention_days: 7

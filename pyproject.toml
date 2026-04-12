@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "thermal-monitor"
+version = "0.1.0"
+description = "Equipment-room thermal monitoring with pluggable sources and WeCom alerting"
+requires-python = ">=3.8"
+dependencies = [
+    "pyyaml>=6.0",
+    # weixin-work>=0.1  # needed for WeCom alerting; install once published to PyPI:
+    #                    #   pip install weixin-work
+    #                    # or during local development:
+    #                    #   pip install -e path/to/weixin-work
+]
+
+[project.scripts]
+thermal-monitor = "thermal_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["thermal_monitor*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

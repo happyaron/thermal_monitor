@@ -1,0 +1,31 @@
+{
+  "@odata.id": "/redfish/v1/Chassis/1/Thermal",
+  "Temperatures": [
+    {
+      "Name": "Inlet Temp",
+      "ReadingCelsius": 24.0,
+      "UpperThresholdNonCritical": 35.0,
+      "UpperThresholdCritical": 42.0,
+      "Status": {"State": "Enabled", "Health": "OK"}
+    },
+    {
+      "Name": "CPU1 Temp",
+      "ReadingCelsius": 55.0,
+      "UpperThresholdNonCritical": 80.0,
+      "UpperThresholdCritical": 95.0,
+      "Status": {"State": "Enabled", "Health": "OK"}
+    },
+    {
+      "Name": "Absent Sensor",
+      "ReadingCelsius": null,
+      "Status": {"State": "Absent"}
+    },
+    {
+      "Name": "No Thresholds",
+      "ReadingCelsius": 30.0,
+      "UpperThresholdNonCritical": null,
+      "UpperThresholdCritical": null,
+      "Status": {"State": "Enabled"}
+    }
+  ]
+}

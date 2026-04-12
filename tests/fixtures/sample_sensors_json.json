@@ -1,0 +1,31 @@
+{
+  "acpitz-acpi-0": {
+    "Adapter": "ACPI interface",
+    "temp1": {
+      "temp1_input": 27.8,
+      "temp1_crit": 119.0
+    },
+    "temp2": {
+      "temp2_input": 29.0
+    }
+  },
+  "coretemp-isa-0000": {
+    "Adapter": "ISA adapter",
+    "Package id 0": {
+      "temp1_input": 55.0,
+      "temp1_max": 100.0
+    },
+    "Core 0": {
+      "temp2_input": 52.0
+    }
+  },
+  "nct6775-isa-02a0": {
+    "Adapter": "ISA adapter",
+    "System Temp": {
+      "temp1_input": 30.5
+    },
+    "CPU Temp": {
+      "temp2_input": 46.0
+    }
+  }
+}

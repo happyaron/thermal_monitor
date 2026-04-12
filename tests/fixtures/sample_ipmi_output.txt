@@ -1,0 +1,6 @@
+Inlet Temp       | 24.000     | degrees C  | ok    | na        | na        | na        | 42.000    | 47.000    | na
+CPU1 Temp        | 55.000     | degrees C  | ok    | na        | na        | na        | 80.000    | 95.000    | na
+Fan1 RPM         | 3600.000   | RPM        | ok    | na        | 300.000   | 500.000   | na        | na        | na
+Voltage 1        | 12.040     | Volts      | ok    | na        | 10.200    | 11.400    | 12.600    | 13.400    | na
+Exhaust Temp     | 35.000     | degrees C  | ok    | na        | na        | na        | 75.000    | 80.000    | na
+PS1 Sensor       | na         | degrees C  | na    | na        | na        | na        | na        | na        | na
