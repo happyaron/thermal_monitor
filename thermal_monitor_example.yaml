@@ -1,0 +1,307 @@
+# thermal_monitor_example.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file, rename it thermal_monitor.yaml, and fill in your devices.
+# Remove or comment out any source types you don't use.
+# ─────────────────────────────────────────────────────────────────────────────
+
+settings:
+  # Maximum parallel threads for source collection.
+  # 0 (default) = one thread per source — optimal for pure I/O workloads.
+  # Set a lower value to limit concurrent connections on constrained networks.
+  max_workers: 0
+
+  # Each worker sleeps a random duration in [0, jitter] seconds before opening
+  # its connection.  Spreads burst traffic on a shared management network or
+  # IPMI gateway.  0.0 (default) disables jitter.
+  jitter: 0.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Global source defaults (optional)
+# ─────────────────────────────────────────────────────────────────────────────
+# Any key here is used as a fallback for every source that doesn't set it
+# explicitly.  Per-source values always take precedence.
+# Most useful for warn/crit so you don't repeat thresholds on every block.
+#
+# defaults:
+#   warn: 40
+#   crit: 55
+#
+#   # ── Primary inlet sensor (used for the summary TEMP column) ──────────────
+#   # Controls which sensor is treated as the representative room-ambient reading.
+#   # The summary row shows this sensor's temperature; the STATUS column still
+#   # reflects the worst state across all sensors.  When the alert source differs
+#   # from the primary sensor an inline hint names the culprit, e.g. (P/S 1 Inlet).
+#   #
+#   # "auto" (default) — tiered heuristic:
+#   #   1. Pure "Inlet" or "Inlet Temp" sensors (excluding component-qualified
+#   #      names like "P/S 1 Inlet", "M.2_Inlet_Temp", "CPU VR Temp", …)
+#   #   2. Pure "Ambient" or "Ambient Temp" sensors (same exclusions)
+#   #   3. Positional sensors containing inlet/ambient/front/board keywords
+#   #   4. Any remaining sensor (last resort)
+#   #   Within each tier the sensor with the lowest reading is chosen (closest
+#   #   to true room temperature — component proximity inflates readings).
+#   #
+#   # "Exact Sensor Name" — use this exact sensor name, bypassing the heuristic.
+#   #   Useful when a vendor uses non-standard naming, e.g. "01-Inlet Ambient Air".
+#   #
+#   # ["Sub1", "Sub2"] — ordered substring search; first match wins.
+#   #   Try each string in order; use the first sensor whose name contains it.
+#   #
+#   # primary_sensor: auto                        # default
+#   # primary_sensor: "Inlet Temp"                # exact name
+#   # primary_sensor: ["Inlet", "Ambient"]        # ordered substring list
+
+sources:
+
+  # ── Local lm-sensors ────────────────────────────────────────────────────────
+  # Reads whatever sensors the OS exposes on the machine running this script.
+  # Requires: lm-sensors package  (apt install lm-sensors / dnf install lm_sensors)
+  # After install run: sudo sensors-detect
+  - name: "Management Host"
+    type: local_sensors
+    enabled: true   # set to false to skip this source without removing it
+    warn: 40      # °C — set lower when using ambient_only (room temps, not die temps)
+    crit: 50
+
+    # ── Recommended for equipment-room ambient monitoring ──────────────────
+    # Drops CPU cores, GPU die, NVMe, and RAM sensors automatically.
+    # Keeps: acpitz (ACPI chassis zones), Super I/O board sensors, and any
+    # sensor whose label contains ambient/intake/inlet/exhaust/board/system.
+    ambient_only: true
+
+    # ── Manual include filters (substring match, case-insensitive) ─────────
+    # Use these when ambient_only is too broad or too narrow for your hardware.
+    # chips:  ["acpitz", "dell_smm", "it87", "nct"]  # keep only these chip families
+    # labels: ["Ambient", "System", "Board"]          # keep only these sensor labels
+
+    # ── Manual exclude filters ─────────────────────────────────────────────
+    # Handy for suppressing a specific noisy chip without listing every keeper.
+    # exclude_chips:  ["nvme", "coretemp", "spd"]
+    # exclude_labels: ["Core", "Package"]
+
+
+  # ── Remote Linux host via SSH ────────────────────────────────────────────────
+  # SSHes to the target host and runs `sensors -j` there.
+  # The remote user must have permission to run sensors (usually no root needed).
+  # Key-based auth is strongly recommended; use ssh-copy-id to set it up.
+  - name: "Storage Server"
+    type: ssh_sensors
+    enabled: true
+    host: 192.168.1.11
+    user: root
+    # key_file: ~/.ssh/monitoring_key   # private key path (omit to use SSH agent)
+    # port: 22
+    warn: 40
+    crit: 50
+    ambient_only: true    # same filtering as local_sensors
+    # chips / labels / exclude_chips / exclude_labels all work here too
+
+
+  # ── IPMI / BMC via ipmitool ──────────────────────────────────────────────────
+  # Reads the full SDR sensor list and filters to temperature sensors.
+  # The BMC's intake/ambient temperature sensors reflect the room environment
+  # better than CPU die temps — set lower thresholds accordingly.
+  # Requires: ipmitool package  (apt install ipmitool)
+  # For IPMI v1.5 (older gear) use  interface: lan
+  - name: "Rack-01 Server A"
+    type: ipmi
+    enabled: true
+    host: 192.168.10.20
+    user: admin
+    password: "changeme"
+    interface: lanplus   # lanplus (IPMI v2, default) | lan (IPMI v1.5) | local
+    # sensors: ["Inlet", "Ambient", "Exhaust"]  # sensor name filter (omit = all temp sensors)
+    warn: 40             # intake/ambient warning — much lower than die temps
+    crit: 55
+    use_ipmi_thresholds: true   # prefer UNC/UCR from SDR when present
+
+
+  # ── HPE ProLiant via ipmitool ───────────────────────────────────────────────
+  # HPE ProLiant iLO inserts an extra column in `ipmitool sensor list` output,
+  # shifting UNC and UCR one position to the right compared to standard IPMI.
+  #
+  # Standard layout:  Name | Value | Unit | Status | LNR | LCR | LNC | UNC | UCR | UNR
+  #                   col:    0       1      2        3     4     5     6     7     8    9
+  # HPE layout:       Name | Value | Unit | Status | LNR | LCR | LNC |  ?  | UNC | UCR | UNR
+  #                   col:    0       1      2        3     4     5     6     7     8     9    10
+  #
+  # Set threshold_columns: [8, 9] to pick up the correct UNC/UCR values.
+  - name: "Rack-02 HPE ProLiant"
+    type: ipmi
+    enabled: true
+    host: 192.168.10.30
+    user: admin
+    password: "changeme"
+    interface: lanplus
+    sensors: ["Inlet", "Ambient", "Exhaust"]
+    warn: 40
+    crit: 55
+    use_ipmi_thresholds: true
+    threshold_columns: [8, 9]   # HPE ProLiant: UNC at col 8, UCR at col 9
+
+
+  # ── Redfish REST API ─────────────────────────────────────────────────────────
+  # Modern standard supported by Dell iDRAC 8+, HPE iLO 4+, OpenBMC,
+  # Supermicro X11+, Lenovo XCC, and others.
+  # verify_ssl: false is usually needed for self-signed BMC certificates.
+  - name: "Rack-03 Server (iDRAC)"
+    type: redfish
+    enabled: true
+    host: 192.168.10.21
+    user: root
+    password: "calvin"
+    # chassis: "System.Embedded.1"   # auto-discovered from /redfish/v1/Chassis if omitted
+    verify_ssl: false
+    # sensors: ["Inlet", "CPU"]      # sensor name filter (omit = all)
+    warn: 40
+    crit: 55
+    use_redfish_thresholds: true    # use UpperThresholdNonCritical/Critical from API;
+                                    # if only UCR is present (UNC null), warn = max(config_warn, UCR − 15)
+                                    # config warn acts as a floor — prevents UCR−15 from being too close
+                                    # to normal operating temps on sensors with a low UCR (e.g. inlet ambient)
+    # Per-sensor overrides — use when a sensor has no thresholds in the API
+    # or the firmware-provided values are wrong.  Key is the exact sensor name.
+    # sensor_thresholds:
+    #   "54-P/S 1 Inlet": {warn: 45, crit: 60}
+    #   "55-P/S 2 Inlet": {warn: 45, crit: 60}
+
+    # Override which sensor is displayed as the summary ambient temperature.
+    # Use when the auto heuristic picks the wrong sensor for this specific device.
+    # primary_sensor: "01-Inlet Ambient Air"   # exact vendor sensor name
+    # primary_sensor: ["Inlet", "Ambient"]     # try "Inlet" first, then "Ambient"
+
+
+  # ── SNMP — Cisco switch ──────────────────────────────────────────────────────
+  # For network equipment that doesn't have Redfish/IPMI.
+  # OIDs must be listed explicitly — there is no standard location across vendors.
+  # Requires: snmp package  (apt install snmp)
+  #
+  # Finding OIDs:
+  #   Cisco: snmpwalk -v2c -c public <host> 1.3.6.1.4.1.9.9.13.1.3
+  #   Juniper: snmpwalk -v2c -c public <host> 1.3.6.1.4.1.2636.3.1.13
+  - name: "Core Switch (Cisco)"
+    type: snmp
+    enabled: true
+    host: 192.168.1.1
+    community: "public"
+    version: "2c"
+    oids:
+      # CISCO-ENVMON-MIB::ciscoEnvMonTemperatureStatusValue
+      - name: "Intake"
+        oid: "1.3.6.1.4.1.9.9.13.1.3.1.3.1"
+      - name: "Module Temp"
+        oid: "1.3.6.1.4.1.9.9.13.1.3.1.3.2"
+    warn: 45
+    crit: 60
+    # divisor: 10   # some OIDs return temperature × 10 as integer
+
+
+  # ── SNMP — Juniper router ────────────────────────────────────────────────────
+  - name: "Core Router (Juniper)"
+    type: snmp
+    enabled: true
+    host: 192.168.1.2
+    community: "public"
+    version: "2c"
+    oids:
+      # JUNIPER-MIB::jnxOperatingTemp.7.1.0.0  (Routing Engine)
+      - name: "Routing Engine"
+        oid: "1.3.6.1.4.1.2636.3.1.13.1.7.7.1.0.0"
+      # JUNIPER-MIB::jnxOperatingTemp.7.2.0.0  (FPC 0)
+      - name: "FPC 0"
+        oid: "1.3.6.1.4.1.2636.3.1.13.1.7.7.2.0.0"
+    warn: 50
+    crit: 65
+
+
+  # ── Sequential IP ranges ─────────────────────────────────────────────────────
+  # Use host_range to collapse a block of identically-configured hosts into a
+  # single entry instead of repeating it N times.
+  #
+  # host_range: "prefix.start-end"
+  #     Expands into one source per last octet, e.g. "192.168.1.10-12" → .10 .11 .12
+  #
+  # name: "Server {}"
+  #     Three optional placeholders, resolved per host:
+  #       {}      display index — start_index + offset, or last octet if start_index omitted
+  #       {ip}    last octet of the host IP (always the raw octet)
+  #       {host}  full host IP address
+  #     Combine to show slot number and full IP:
+  #       "Bay {} ({host})"  →  "Bay 1 (192.168.10.41)", "Bay 2 (192.168.10.42)", …
+  #
+  # start_index: 1
+  #     Index offset for the {} placeholder.
+  #     e.g. start_index=1, host_range ".12-.20"  → names 1, 2, …, 9
+  #
+  # enable_hosts: [14, 17]
+  #     Last octets in this list get enabled: true; all others inherit the
+  #     defaults or per-block enabled setting (useful for defaults: enabled: false).
+  #
+  - name: "Storage Unit {}"
+    type: redfish
+    host_range: "192.168.10.31-35"
+    user: readonly
+    password: "changeme"
+    verify_ssl: false
+
+  - name: "Rack A - Bay {} ({host})"
+    type: redfish
+    host_range: "192.168.10.41-48"
+    start_index: 1
+    user: admin
+    password: "changeme"
+    enable_hosts: [42, 45, 48]   # Bay 2, 5, 8 are populated
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Alert configuration
+# ─────────────────────────────────────────────────────────────────────────────
+alerting:
+  # Delivery mode: "webhook" (group-chat robot) or "app" (dedicated app API).
+  mode: webhook
+
+  # ── Webhook mode ────────────────────────────────────────────────────────────
+  # Key from the group chat → Add Robot settings page.
+  # Prefer the environment variable to keep credentials out of this file.
+  # webhook_key: "YOUR_WEBHOOK_KEY_HERE"   # or: WEIXIN_WORK_WEBHOOK_KEY env var
+
+  # ── App mode ────────────────────────────────────────────────────────────────
+  # Uncomment and fill in when mode: app.  All three values can alternatively
+  # be supplied as env vars: WEIXIN_WORK_CORP_ID / CORP_SECRET / AGENT_ID.
+  #
+  # corp_id:     "YOUR_CORP_ID"
+  # corp_secret: "YOUR_APP_SECRET"
+  # agent_id:    1000001
+  #
+  # Who receives the alert (at least one required):
+  #   to_user:  "@all"            # user ID(s) pipe-separated, or "@all"
+  #   to_party: ""                # department ID(s) pipe-separated
+  #   to_tag:   ""                # tag ID(s) pipe-separated
+  # to_user: "@all"
+
+  # ── Common ──────────────────────────────────────────────────────────────────
+  # Seconds before the same sensor can trigger another alert.
+  alert_cooldown: 300   # 5 minutes
+
+  # When any sensor hits CRIT: webhook mode sends @all mention, app mode sends
+  # a second broadcast text to to_user="@all" regardless of normal targeting.
+  mention_all_on_crit: true
+
+  # File used to persist cooldown state across script restarts.
+  state_file: "/tmp/thermal_monitor_state.json"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reading log  (optional — omit the entire section to disable)
+# ─────────────────────────────────────────────────────────────────────────────
+# Appends every collection run to a SQLite database for post-incident
+# inspection.  Rows older than retention_days are pruned automatically on
+# each run so the file stays bounded.
+#
+# Inspect with:
+#   sqlite3 /var/lib/thermal_monitor/readings.db \
+#     "SELECT * FROM readings WHERE status != 'OK' ORDER BY ts DESC LIMIT 50"
+#
+# logging:
+#   db_file: "/var/lib/thermal_monitor/readings.db"
+#   retention_days: 30   # default: 30
