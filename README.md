@@ -9,10 +9,24 @@ WeCom (企业微信) alerts when configurable thresholds are breached.
 
 ## Quick start
 
+Pick one of:
+
 ```sh
+# Option A — scripted venv setup (recommended).  Creates ./venv/, installs
+# thermal_monitor, and also installs ../weixin_work if it's next to this
+# tree.  run_monitor.sh auto-detects the venv on subsequent runs.
+./setup_venv.sh                     # or: PYTHON=python3.11 ./setup_venv.sh
+```
+
+```sh
+# Option B — manual install into the ambient Python.
 pip install pyyaml
 pip install -e ../weixin_work       # for WeCom alert delivery (optional)
+```
 
+Then configure and run:
+
+```sh
 cp thermal_monitor_example.yaml thermal_monitor.yaml
 # edit to match your hardware, credentials, thresholds
 
