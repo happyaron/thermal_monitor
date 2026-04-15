@@ -43,6 +43,20 @@ def atomic_write_text(path: str, text: str, *, newline_eof: bool = False) -> Non
                 fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())
+        # mkstemp() always creates files 0600 (a security feature for
+        # shared tempdirs).  For a user-visible atomic write we want the
+        # final file to match whatever a plain open() would produce:
+        # preserve the existing destination's mode when replacing a file,
+        # or fall back to the umask-derived mode for first-time creation.
+        # Without this, consumers that rely on umask/UMask= (e.g. a web
+        # server reading readings.json) see 0600 files no matter what.
+        try:
+            mode = os.stat(p).st_mode & 0o777
+        except FileNotFoundError:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(tmp, mode)
         os.replace(tmp, p)
     except Exception:
         # Best-effort cleanup of the tempfile; re-raise the original error.

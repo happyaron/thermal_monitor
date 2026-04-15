@@ -59,6 +59,39 @@ class TestAtomicWriteText:
                      if f.name != "out.json"]
         assert leftovers == []
 
+    def test_new_file_honors_umask(self, tmp_path):
+        """First-time writes should produce 0666 & ~umask, not mkstemp's 0600."""
+        p = tmp_path / "fresh.json"
+        old = os.umask(0o022)
+        try:
+            atomic_write_text(str(p), "x")
+        finally:
+            os.umask(old)
+        assert (p.stat().st_mode & 0o777) == 0o644
+
+    def test_new_file_honors_restrictive_umask(self, tmp_path):
+        """A tight umask should still be respected, not widened."""
+        p = tmp_path / "fresh.json"
+        old = os.umask(0o077)
+        try:
+            atomic_write_text(str(p), "x")
+        finally:
+            os.umask(old)
+        assert (p.stat().st_mode & 0o777) == 0o600
+
+    def test_overwrite_preserves_existing_mode(self, tmp_path):
+        """Replacing a file must keep its mode, regardless of the current umask."""
+        p = tmp_path / "exists.json"
+        p.write_text("old")
+        os.chmod(p, 0o640)
+        old = os.umask(0o077)    # a umask that would otherwise force 0600
+        try:
+            atomic_write_text(str(p), "new")
+        finally:
+            os.umask(old)
+        assert (p.stat().st_mode & 0o777) == 0o640
+        assert p.read_text() == "new"
+
     def test_no_partial_write_visible_mid_operation(self, tmp_path):
         """
         While atomic_write_text is between the tempfile write and os.replace,
