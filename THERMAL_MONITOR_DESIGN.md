@@ -299,13 +299,23 @@ script behaves correctly under a process supervisor:
 - JSON output, web-dashboard writes, the SQLite reading log, and WeCom
   alert delivery are unchanged; they run as before in every format.
 - Intended shape of the deployment:
-  - `run_monitor.sh -c config.yaml -i 60 --json /srv/www/readings.json --log-format systemd`
-    is wrapped in a systemd unit (`Type=simple`, `StandardError=journal`);
+  - A **oneshot service** (`systemd/thermal-monitor.service`) runs one
+    collection cycle with `--log-format=systemd --json …` and exits;
+  - a **timer** (`systemd/thermal-monitor.timer`) re-triggers it every
+    minute with `OnBootSec` / `OnUnitActiveSec`, randomized delay, and
+    `Persistent=true` for catch-up after downtime;
   - the JSON file is served by any static HTTP server alongside
     `thermal_monitor.html`;
   - WeCom receives throttled alerts for WARN/CRIT;
   - journald captures every WARN/CRIT observation (independent of the
     alert cooldown) and the SQLite DB retains `retention_days` of history.
+- Install by copying the two unit files to `/etc/systemd/system/`, then
+  `systemctl enable --now thermal-monitor.timer`.  See the header comments
+  in each unit file for user, paths, state-directory, and sandboxing notes.
+  To drive the service as a long-running process instead (`Type=simple`
+  with `-i 60`), drop the timer and swap `Type=oneshot` for `Type=simple`
+  in a drop-in — both patterns are supported by the `--log-format=systemd`
+  output, but oneshot+timer gives better per-cycle observability.
 
 ## Dependencies
 

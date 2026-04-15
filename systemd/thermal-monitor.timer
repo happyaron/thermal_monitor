@@ -1,0 +1,38 @@
+# thermal-monitor.timer — triggers thermal-monitor.service on a schedule.
+#
+# Enable with:
+#   sudo systemctl enable --now thermal-monitor.timer
+#
+# Inspect:
+#   systemctl list-timers thermal-monitor.timer
+#   systemctl status      thermal-monitor.timer
+#
+# Adjust cadence without editing this file:
+#   sudo systemctl edit thermal-monitor.timer
+# then override [Timer] keys in the generated drop-in.
+
+[Unit]
+Description=Run thermal-monitor.service on a schedule
+Documentation=file:///opt/thermal_monitor/THERMAL_MONITOR_DESIGN.md
+# If someone disables the timer, also stop the (oneshot) service.
+Requires=thermal-monitor.service
+
+[Timer]
+# First cycle: 1 minute after boot (lets network and BMCs come up).
+OnBootSec=1min
+# Then every minute after the previous run finished.  Change to 5min / 15min
+# if you're polling many BMCs over a slow management network.
+OnUnitActiveSec=1min
+
+# Fire once at startup if the machine was down past a scheduled run.
+Persistent=true
+
+# Add up to ±5 s of randomized delay — spreads collection load if multiple
+# monitors share an IPMI gateway or management VLAN.
+AccuracySec=1s
+RandomizedDelaySec=5s
+
+Unit=thermal-monitor.service
+
+[Install]
+WantedBy=timers.target
