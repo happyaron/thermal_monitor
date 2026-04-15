@@ -99,12 +99,12 @@ automatically when needed). The unit runs `run_monitor.sh` with
 `THERMAL_MONITOR_STATE_FILE`) are exposed via `Environment=` — override with
 `systemctl edit thermal-monitor.service` without touching the shipped file.
 
-The timer fires `OnBootSec=1min`, then `OnUnitActiveSec=15min`, with
+The timer fires `OnBootSec=1min`, then `OnUnitActiveSec=5min`, with
 `RandomizedDelaySec=5s` (staggers load when multiple monitors share a
 management VLAN) and `Persistent=true` (catches up after downtime).
-Tighten the cadence to 1min / 5min for fast-response use cases, or loosen
-it for cooler rooms — `systemctl edit thermal-monitor.timer` lets you
-override `OnUnitActiveSec=` without editing the shipped file.
+Tighten the cadence to 1min for fast-response use cases, or loosen it
+to 15min / 30min / 1h for cooler rooms — `systemctl edit thermal-monitor.timer`
+lets you override `OnUnitActiveSec=` without editing the shipped file.
 
 ## Alerts
 

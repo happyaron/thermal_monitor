@@ -20,13 +20,12 @@ Requires=thermal-monitor.service
 [Timer]
 # First cycle: 1 minute after boot (lets network and BMCs come up).
 OnBootSec=1min
-# Then every 15 minutes after the previous run finished.  This is a
-# reasonable middle ground for equipment-room ambient monitoring: granular
-# enough to catch a developing problem before it escalates, infrequent
-# enough not to hammer BMCs over a slow management network.  Tighten to
-# e.g. 1min / 5min via `systemctl edit thermal-monitor.timer` for hosts
-# that need quicker response, or loosen to 30min / 1h for cooler rooms.
-OnUnitActiveSec=15min
+# Then every 5 minutes after the previous run finished.  Granular enough
+# to catch a developing thermal problem quickly without hammering BMCs
+# over a slow management network.  Tighten to 1min via
+# `systemctl edit thermal-monitor.timer` for hosts that need faster
+# response, or loosen to 15min / 30min / 1h for cooler rooms.
+OnUnitActiveSec=5min
 
 # Fire once at startup if the machine was down past a scheduled run.
 Persistent=true

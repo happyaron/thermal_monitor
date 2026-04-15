@@ -307,7 +307,7 @@ script behaves correctly under a process supervisor:
     (systemd remaps ownership to the current dynamic UID before each
     start);
   - a **timer** (`systemd/thermal-monitor.timer`) re-triggers it every
-    15 minutes with `OnBootSec=1min` / `OnUnitActiveSec=15min`,
+    5 minutes with `OnBootSec=1min` / `OnUnitActiveSec=5min`,
     `RandomizedDelaySec=5s`, and `Persistent=true` for catch-up after
     downtime — tighten or loosen the cadence via `systemctl edit`;
   - the JSON file is served by any static HTTP server alongside
