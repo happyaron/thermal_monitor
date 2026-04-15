@@ -281,6 +281,31 @@ CREATE INDEX readings_ts ON readings(ts);
 | JSON stdout | `python thermal_monitor.py -c config.yaml --json` | JSON to stdout (no table) |
 | JSON file | `python thermal_monitor.py -c config.yaml --json readings.json` | JSON to file + terminal table |
 | Verbose | `python thermal_monitor.py -c config.yaml -v` | Debug logging enabled |
+| Plain log | `python thermal_monitor.py -c config.yaml --log-format plain` | Structured log lines (timestamp + level) on stderr instead of the ANSI table |
+| Systemd | `python thermal_monitor.py -c config.yaml --log-format systemd` | Plain log lines with sd-daemon `<N>` priority prefixes for journald |
+
+### Service / daemon mode
+
+`--log-format {plain,systemd}` swaps the interactive ANSI table for
+line-oriented log output on stderr via Python's `logging` module, so the
+script behaves correctly under a process supervisor:
+
+- One `INFO` heartbeat per collection cycle: `cycle ok=… warn=… crit=… err=… sources=… sensors=…`
+- One `WARNING` line per WARN reading, one `CRITICAL` per CRIT, one `ERROR` per collection failure.
+- `systemd` format prefixes each line with an `sd-daemon(3)` priority code
+  (`<2>` crit, `<3>` err, `<4>` warn, `<6>` info) so `systemd-journald`
+  classifies severity correctly and operators can filter with e.g.
+  `journalctl -u thermal-monitor -p warning`.
+- JSON output, web-dashboard writes, the SQLite reading log, and WeCom
+  alert delivery are unchanged; they run as before in every format.
+- Intended shape of the deployment:
+  - `run_monitor.sh -c config.yaml -i 60 --json /srv/www/readings.json --log-format systemd`
+    is wrapped in a systemd unit (`Type=simple`, `StandardError=journal`);
+  - the JSON file is served by any static HTTP server alongside
+    `thermal_monitor.html`;
+  - WeCom receives throttled alerts for WARN/CRIT;
+  - journald captures every WARN/CRIT observation (independent of the
+    alert cooldown) and the SQLite DB retains `retention_days` of history.
 
 ## Dependencies
 

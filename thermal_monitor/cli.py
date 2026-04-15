@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Union
 from thermal_monitor.config import load_config
 from thermal_monitor.collector import collect_all
 from thermal_monitor.display import print_table
+from thermal_monitor.display_log import configure_log_output, emit_status_log
 from thermal_monitor.alerts import send_alerts, _load_state, _save_state
 from thermal_monitor.serialization import readings_to_dict
 from thermal_monitor.logging_db import _open_log_db, _write_log
@@ -38,6 +39,8 @@ examples:
   python thermal_monitor.py -c thermal_monitor.yaml --dry-run -v
   python thermal_monitor.py -c thermal_monitor.yaml --json              # JSON to stdout
   python thermal_monitor.py -c thermal_monitor.yaml --json readings.json  # JSON to file + table
+  python thermal_monitor.py -c thermal_monitor.yaml -i 60 \
+                               --json readings.json --log-format systemd    # service mode
         """,
     )
     parser.add_argument(
@@ -70,12 +73,30 @@ examples:
         action="store_true",
         help="Enable debug logging",
     )
+    parser.add_argument(
+        "--log-format",
+        choices=["table", "plain", "systemd"],
+        default="table",
+        help=(
+            "Terminal output style. 'table' (default): ANSI-colored interactive "
+            "table. 'plain': structured log lines on stderr (timestamp + level "
+            "+ message), suitable for log files or `logger(1)`. 'systemd': same "
+            "as plain, prefixed with sd-daemon <N> priority codes so journald "
+            "classifies WARN/CRIT lines correctly. Use 'systemd' when running "
+            "via run_monitor.sh under a systemd unit."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.WARNING,
-        format="%(levelname)s  %(name)s: %(message)s",
-    )
+    if args.log_format == "table":
+        logging.basicConfig(
+            level=logging.DEBUG if args.verbose else logging.WARNING,
+            format="%(levelname)s  %(name)s: %(message)s",
+        )
+    else:
+        # Service mode: stderr-based structured output that journald/syslog
+        # can ingest.  INFO baseline so the per-cycle heartbeat shows up.
+        configure_log_output(args.log_format, debug=args.verbose)
 
     if not Path(args.config).exists():
         print(
@@ -127,8 +148,15 @@ examples:
             else:
                 Path(args.json).write_text(json_str + "\n")
                 log.info("JSON written to %s", args.json)
-        if not json_to_stdout:
-            print_table(readings, source_groups, primary_sensors)
+        if args.log_format == "table":
+            # Interactive: skip the table when piping JSON to stdout, otherwise
+            # the two outputs would collide.
+            if not json_to_stdout:
+                print_table(readings, source_groups, primary_sensors)
+        else:
+            # Service mode: log lines go to stderr, so they coexist with
+            # JSON-on-stdout without interleaving.
+            emit_status_log(readings, source_groups, primary_sensors)
 
         if log_conn is not None and not args.dry_run:
             try:
@@ -146,12 +174,17 @@ examples:
 
     signal.signal(signal.SIGTERM, _on_stop)
 
+    def _banner(msg: str) -> None:
+        # In table mode the banners are human-facing text on stderr; in
+        # service mode they become INFO log lines so journald picks them up.
+        if args.log_format == "table":
+            print(msg, file=sys.stderr)
+        else:
+            logging.getLogger("thermal_monitor.status").info(msg)
+
     try:
         if args.interval > 0:
-            print(
-                f"Polling every {args.interval} s — Ctrl-C to stop.",
-                file=sys.stderr,
-            )
+            _banner(f"Polling every {args.interval} s — Ctrl-C or SIGTERM to stop.")
             try:
                 while _running[0]:
                     run_once()
@@ -162,7 +195,7 @@ examples:
                         time.sleep(1)
             except KeyboardInterrupt:
                 pass
-            print("\nStopped.", file=sys.stderr)
+            _banner("Stopped.")
         else:
             run_once()
     finally:

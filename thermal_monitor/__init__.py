@@ -7,6 +7,9 @@ from thermal_monitor.config import load_config, expand_host_range
 from thermal_monitor.collector import collect_all
 from thermal_monitor.analysis import most_urgent, primary_inlet, alert_hint
 from thermal_monitor.display import print_table
+from thermal_monitor.display_log import (
+    configure_log_output, emit_status_log, SystemdFormatter,
+)
 from thermal_monitor.serialization import readings_to_dict
 from thermal_monitor.alerts import send_alerts
 from thermal_monitor.cli import main
@@ -19,6 +22,7 @@ __all__ = [
     "collect_all",
     "most_urgent", "primary_inlet", "alert_hint",
     "print_table",
+    "configure_log_output", "emit_status_log", "SystemdFormatter",
     "readings_to_dict",
     "send_alerts",
     "main",
