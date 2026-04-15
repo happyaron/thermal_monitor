@@ -2,8 +2,9 @@
 #
 # Installation:
 #   1. Place the project at /opt/thermal_monitor (or override paths below).
-#   2. Create a service user:   sudo useradd -r -s /usr/sbin/nologin thermal-monitor
-#   3. Edit /etc/thermal_monitor/thermal_monitor.yaml (copy from the example).
+#      No service user is needed — DynamicUser=yes allocates a transient
+#      UID/GID per invocation.
+#   2. Edit /etc/thermal_monitor/thermal_monitor.yaml (copy from the example).
 #      Point logging.db_file into /var/lib/thermal_monitor/ so the SQLite
 #      reading log also lands in StateDirectory:
 #          logging:
@@ -11,16 +12,16 @@
 #      (The alert-cooldown state_file is already handled for you via the
 #      $THERMAL_MONITOR_STATE_FILE env var set below — PrivateTmp=yes would
 #      otherwise isolate /tmp per run and reset the cooldown every cycle.)
-#   4. Install the units:
+#   3. Install the units:
 #          sudo install -m 644 systemd/thermal-monitor.service /etc/systemd/system/
 #          sudo install -m 644 systemd/thermal-monitor.timer   /etc/systemd/system/
 #          sudo systemctl daemon-reload
 #          sudo systemctl enable --now thermal-monitor.timer
-#   5. Watch it run:
+#   4. Watch it run:
 #          journalctl -u thermal-monitor.service -f
 #          journalctl -u thermal-monitor.service -p warning    # only WARN/CRIT
 #
-# Tune paths / user without editing this file by running:
+# Tune paths or override settings without editing this file by running:
 #      sudo systemctl edit thermal-monitor.service
 # which creates a drop-in at /etc/systemd/system/thermal-monitor.service.d/.
 
@@ -32,8 +33,15 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=thermal-monitor
-Group=thermal-monitor
+# DynamicUser=yes allocates a transient UID/GID for each invocation (in the
+# 61184–65519 range), so no `useradd thermal-monitor` setup step is required.
+# StateDirectory= files persist across restarts and reboots — systemd
+# physically stores them under /var/lib/private/<name>/ (with a symlink at
+# /var/lib/<name>) and recursively chowns the tree to the current dynamic
+# UID before the service starts, so ownership stays correct even if the
+# allocated UID changes between runs.  In practice the same unit name maps
+# to a hash-derived UID and reuses it, so chowns are rare.
+DynamicUser=yes
 WorkingDirectory=/opt/thermal_monitor
 
 # Override these with a drop-in (systemctl edit) if your layout differs.
@@ -53,8 +61,10 @@ ExecStart=/opt/thermal_monitor/run_monitor.sh \
     --json ${JSON_OUT} \
     --log-format=systemd
 
-# State / reading-log directory — auto-created and chown'd to the unit user.
-# Available to the process at /var/lib/thermal_monitor.
+# State / reading-log directory — auto-created and chown'd to the dynamic
+# UID.  Visible to both host and service at /var/lib/thermal_monitor (the
+# physical path under DynamicUser= is /var/lib/private/thermal_monitor with
+# a symlink at the simple location).
 StateDirectory=thermal_monitor
 StateDirectoryMode=0750
 
@@ -63,8 +73,12 @@ StateDirectoryMode=0750
 StandardOutput=journal
 StandardError=journal
 
-# Sandboxing — keep the blast radius small.  Relax with a drop-in if the
-# config or output path falls outside these trees.
+# Sandboxing.  Most of these are already implied by DynamicUser=yes, but
+# we set them explicitly so the policy stays in force if DynamicUser is
+# ever removed via a drop-in, and so a security-audit reading this unit
+# can see the posture without cross-referencing the systemd manpage.
+# ProtectHome=yes is intentionally stricter than DynamicUser's implied
+# ProtectHome=read-only — the service has no business reading /home or /root.
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

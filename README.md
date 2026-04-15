@@ -66,7 +66,6 @@ python3 -m http.server 8000
 A oneshot service + timer pair is shipped under `systemd/`:
 
 ```sh
-sudo useradd -r -s /usr/sbin/nologin thermal-monitor
 sudo install -m 644 systemd/thermal-monitor.service /etc/systemd/system/
 sudo install -m 644 systemd/thermal-monitor.timer   /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -76,16 +75,22 @@ journalctl -u thermal-monitor.service -f             # live log
 journalctl -u thermal-monitor.service -p warning     # WARN/CRIT only
 ```
 
-The service runs `run_monitor.sh` with `--log-format=systemd --json …` under
-a sandboxed unit (`ProtectSystem=strict`, `PrivateTmp=yes`,
-`StateDirectory=thermal_monitor`, no-new-privileges, etc.). Tunable paths
-(`CONFIG`, `JSON_OUT`, `THERMAL_MONITOR_STATE_FILE`) are exposed via
-`Environment=` — override with `systemctl edit thermal-monitor.service`
-without touching the shipped file.
+The service uses `DynamicUser=yes`, so no `useradd` step is required —
+systemd allocates a transient UID per invocation, and `StateDirectory=`
+files persist across restarts and reboots (with their ownership remapped
+automatically when needed). The unit runs `run_monitor.sh` with
+`--log-format=systemd --json …` under tight sandboxing (`ProtectSystem=strict`,
+`ProtectHome=yes`, `PrivateTmp=yes`, `NoNewPrivileges=yes`, plus the
+`Protect*` / `Restrict*` family). Tunable paths (`CONFIG`, `JSON_OUT`,
+`THERMAL_MONITOR_STATE_FILE`) are exposed via `Environment=` — override with
+`systemctl edit thermal-monitor.service` without touching the shipped file.
 
-The timer fires `OnBootSec=1min`, then `OnUnitActiveSec=1min`, with
+The timer fires `OnBootSec=1min`, then `OnUnitActiveSec=15min`, with
 `RandomizedDelaySec=5s` (staggers load when multiple monitors share a
 management VLAN) and `Persistent=true` (catches up after downtime).
+Tighten the cadence to 1min / 5min for fast-response use cases, or loosen
+it for cooler rooms — `systemctl edit thermal-monitor.timer` lets you
+override `OnUnitActiveSec=` without editing the shipped file.
 
 ## Alerts
 

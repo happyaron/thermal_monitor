@@ -300,10 +300,16 @@ script behaves correctly under a process supervisor:
   alert delivery are unchanged; they run as before in every format.
 - Intended shape of the deployment:
   - A **oneshot service** (`systemd/thermal-monitor.service`) runs one
-    collection cycle with `--log-format=systemd --json …` and exits;
+    collection cycle with `--log-format=systemd --json …` and exits.
+    `DynamicUser=yes` allocates a transient UID per invocation, so no
+    service-user setup is needed; `StateDirectory=thermal_monitor`
+    persists `state.json` / `readings.db` / `readings.json` across runs
+    (systemd remaps ownership to the current dynamic UID before each
+    start);
   - a **timer** (`systemd/thermal-monitor.timer`) re-triggers it every
-    minute with `OnBootSec` / `OnUnitActiveSec`, randomized delay, and
-    `Persistent=true` for catch-up after downtime;
+    15 minutes with `OnBootSec=1min` / `OnUnitActiveSec=15min`,
+    `RandomizedDelaySec=5s`, and `Persistent=true` for catch-up after
+    downtime — tighten or loosen the cadence via `systemctl edit`;
   - the JSON file is served by any static HTTP server alongside
     `thermal_monitor.html`;
   - WeCom receives throttled alerts for WARN/CRIT;
