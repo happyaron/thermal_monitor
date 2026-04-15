@@ -150,6 +150,11 @@ def load_config(path: str) -> Tuple[List[ThermalSource], dict, dict, dict]:
         if not merged.get("enabled", True):
             log.debug("Source #%d (%r) is disabled — skipping", i, merged.get("name", "?"))
             continue
+        if not merged.get("name"):
+            # Name drives by_source grouping, alert_key, and display output —
+            # sources without a name would silently merge into an "" bucket.
+            log.warning("Source #%d: missing 'name' — skipping", i)
+            continue
         stype = merged.get("type")
         cls = SOURCE_TYPES.get(stype)
         if cls is None:
@@ -170,6 +175,19 @@ def load_config(path: str) -> Tuple[List[ThermalSource], dict, dict, dict]:
             sources.append(src)
         except Exception as exc:
             log.warning("Source #%d (%r): init error — %s", i, stype, exc)
+
+    # Detect duplicate names — these would silently merge readings under one
+    # bucket in by_source and share cooldown state via alert_key.
+    seen: Dict[str, int] = {}
+    for src in sources:
+        seen[src.name] = seen.get(src.name, 0) + 1
+    dupes = sorted(n for n, count in seen.items() if count > 1)
+    if dupes:
+        log.warning(
+            "Duplicate source name(s) in config: %s — readings will be "
+            "merged under one key and WeCom cooldown will be shared",
+            dupes,
+        )
 
     alerting_cfg: dict = raw.get("alerting", {})
     settings: dict     = raw.get("settings", {})

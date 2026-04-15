@@ -64,3 +64,22 @@ class TestWriteLog:
         rows = conn.execute("SELECT ts FROM readings").fetchall()
         assert all("2000" not in row[0] for row in rows)
         conn.close()
+
+    def test_zero_retention_does_not_discard_inserts(self, tmp_path):
+        """M2: retention_days=0 must NOT trigger a malformed datetime()
+        call that rolls back the transaction and loses the just-inserted
+        batch.  Zero (or negative) simply disables pruning."""
+        conn = self._open(tmp_path)
+        _write_log(conn, [make_reading(sensor=f"s{i}", value=20.0 + i)
+                          for i in range(3)], retention_days=0)
+        count = conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
+        assert count == 3
+        conn.close()
+
+    def test_negative_retention_does_not_discard_inserts(self, tmp_path):
+        conn = self._open(tmp_path)
+        _write_log(conn, [make_reading(sensor="s", value=25.0)],
+                   retention_days=-1)
+        count = conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
+        assert count == 1
+        conn.close()

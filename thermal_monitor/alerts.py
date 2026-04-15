@@ -53,7 +53,11 @@ def _make_sender(alerting_cfg: dict):
     try:
         from weixin_work import WebhookClient, AppClient  # type: ignore
     except ImportError:
-        raise RuntimeError("weixin_work library not found — pip install -e .")
+        raise RuntimeError(
+            "weixin_work library not found — install it with "
+            "'pip install weixin-work' (or, for local development, "
+            "'pip install -e /path/to/weixin_work')"
+        )
 
     mode = alerting_cfg.get("mode", "webhook").strip().lower()
 

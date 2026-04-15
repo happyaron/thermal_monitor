@@ -110,8 +110,12 @@ class LocalSensorsSource(ThermalSource):
                         continue
                     prefix = sub[: -len("_input")]
                     # Prefer sensor-reported critical/max over config defaults.
-                    raw_crit = (fdata.get(f"{prefix}_crit")
-                                or fdata.get(f"{prefix}_max"))
+                    # Use explicit `is None` — a literal 0.0 is falsy but the
+                    # `or` fallback would silently shift to _max, which is a
+                    # different semantic than "chip reports no crit".
+                    raw_crit = fdata.get(f"{prefix}_crit")
+                    if raw_crit is None:
+                        raw_crit = fdata.get(f"{prefix}_max")
                     sensor_crit: Optional[float] = None
                     if raw_crit is not None:
                         fc = float(raw_crit)

@@ -137,7 +137,10 @@ examples:
         except Exception as exc:
             print(f"WARNING: could not open log DB {log_db!r}: {exc}", file=sys.stderr)
 
-    log_retention = int(logging_cfg.get("retention_days", 30))
+    # Coerce None → 30 before int(), so `retention_days:` (no value, a
+    # common way to "comment out" a YAML key) doesn't raise TypeError.
+    retention_raw = logging_cfg.get("retention_days")
+    log_retention = int(retention_raw) if retention_raw is not None else 30
 
     json_to_stdout = (args.json == "-")
 

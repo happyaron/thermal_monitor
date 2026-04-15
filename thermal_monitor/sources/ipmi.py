@@ -60,8 +60,14 @@ class IPMISource(ThermalSource):
                 "-I", self.interface,
                 "-L", "USER",
                 "-U", self.user,
-                "-E",  # read password from IPMI_PASSWORD env var (avoids ps exposure)
             ]
+            # -E makes ipmitool read from IPMI_PASSWORD (avoids ps exposure),
+            # but it ONLY helps if a password is actually set — otherwise
+            # ipmitool errors out with "Unable to read password from
+            # environment" instead of the clearer "Unauthenticated" message
+            # that would come from attempting the auth without any password.
+            if self.password:
+                cmd.append("-E")
         return cmd
 
     def _ipmitool_env(self) -> Optional[dict]:

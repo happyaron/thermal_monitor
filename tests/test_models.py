@@ -39,6 +39,20 @@ class TestThermalReadingStatus:
         r = make_reading(value=54.9, warn=40.0, crit=55.0)
         assert r.status == "WARN"
 
+    def test_nan_value_is_error(self):
+        # M1: NaN >= threshold is always False, which would silently report
+        # a broken sensor as OK.  The model treats non-finite as ERROR.
+        r = make_reading(value=float("nan"), warn=40.0, crit=55.0)
+        assert r.status == "ERROR"
+
+    def test_inf_value_is_error(self):
+        r = make_reading(value=float("inf"), warn=40.0, crit=55.0)
+        assert r.status == "ERROR"
+
+    def test_negative_inf_value_is_error(self):
+        r = make_reading(value=float("-inf"), warn=40.0, crit=55.0)
+        assert r.status == "ERROR"
+
 
 class TestAlertKey:
     def test_format(self):

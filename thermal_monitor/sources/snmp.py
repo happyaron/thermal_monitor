@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import math
 import subprocess
 from typing import Dict, List
 from thermal_monitor.sources.base import ThermalSource
@@ -42,6 +43,12 @@ class SNMPSource(ThermalSource):
         self.version   = str(cfg.get("version", "2c"))
         self.oids: List[Dict] = cfg.get("oids", [])
         self.default_divisor = float(cfg.get("divisor", 1.0))
+        if self.default_divisor == 0:
+            # Rejected at init time so one bad global knob doesn't silently
+            # kill every OID on this source at collection time.
+            raise ValueError(
+                f"snmp source {self.name!r}: divisor must be non-zero"
+            )
 
     def _snmp_common(self) -> List[str]:
         return ["-v", self.version, "-c", self.community, self.host]
@@ -55,6 +62,11 @@ class SNMPSource(ThermalSource):
             name    = entry.get("name", entry.get("oid", "?"))
             oid     = entry["oid"]
             divisor = float(entry.get("divisor", self.default_divisor))
+            if divisor == 0:
+                # Per-OID divisor override set to 0 — isolate this one OID
+                # rather than letting ZeroDivisionError disable the rest.
+                readings.append(self._err(name, "divisor is 0 (division by zero)"))
+                continue
 
             log.debug("[%s] snmpget -v%s -c *** %s %s", self.name, self.version, self.host, oid)
             try:
@@ -77,6 +89,12 @@ class SNMPSource(ThermalSource):
                 value = float(raw) / divisor
             except ValueError:
                 readings.append(self._err(name, f"non-numeric SNMP value: {raw!r}"))
+                continue
+            # Some devices return "nan" as a valid float literal (e.g. for
+            # unpopulated sensors).  NaN >= threshold is False, so without
+            # this check the sensor would silently report OK forever.
+            if not math.isfinite(value):
+                readings.append(self._err(name, f"non-finite SNMP value: {raw!r}"))
                 continue
 
             log.debug("[%s] %s → raw=%s  value=%.1f°C", self.name, name, raw, value)

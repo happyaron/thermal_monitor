@@ -40,6 +40,11 @@ def _write_log(
     """
     Insert current readings and prune rows older than *retention_days*.
     Runs inside a single transaction so a failure leaves the DB untouched.
+
+    If *retention_days* is <= 0 the DELETE is skipped rather than executed
+    with a malformed interval — passing ``-0 days`` or ``--30 days`` to
+    SQLite's ``datetime()`` raises, which would roll back the INSERT in the
+    same transaction (silent data loss of the just-collected batch).
     """
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = [
@@ -51,8 +56,11 @@ def _write_log(
         conn.executemany(
             "INSERT INTO readings VALUES (?,?,?,?,?,?,?)", rows
         )
-        conn.execute(
-            "DELETE FROM readings WHERE ts < datetime('now', ?)",
-            (f"-{retention_days} days",),
-        )
-    log.debug("log: wrote %d row(s), retention %d days", len(rows), retention_days)
+        if retention_days > 0:
+            conn.execute(
+                "DELETE FROM readings WHERE ts < datetime('now', ?)",
+                (f"-{retention_days} days",),
+            )
+    log.debug("log: wrote %d row(s), retention %s",
+              len(rows),
+              f"{retention_days} days" if retention_days > 0 else "disabled")

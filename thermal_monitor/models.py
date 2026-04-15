@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -16,6 +17,11 @@ class ThermalReading:
     def status(self) -> str:
         """One of: OK  WARN  CRIT  ERROR"""
         if self.error:           return "ERROR"
+        # Guard against NaN / Inf — any comparison with NaN is False, which
+        # would otherwise silently report a broken sensor as OK.  Sources
+        # should filter these out before creating readings, but this is
+        # defense in depth for any path that slips through.
+        if not math.isfinite(self.value):  return "ERROR"
         if self.value >= self.crit:  return "CRIT"
         if self.value >= self.warn:  return "WARN"
         return "OK"

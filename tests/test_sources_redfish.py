@@ -98,3 +98,40 @@ class TestCollect:
              patch.object(src, "_get", return_value={"Temperatures": []}):
             readings = src.collect()
         assert readings[0].error is not None
+
+    def test_nan_reading_skipped(self):
+        """M1: a NaN ReadingCelsius must not produce a reading that
+        later gets reported as OK (NaN >= threshold is always False)."""
+        data = {
+            "Temperatures": [
+                {"Name": "Broken", "ReadingCelsius": float("nan"),
+                 "Status": {"State": "Enabled"}},
+                {"Name": "Good", "ReadingCelsius": 25.0,
+                 "Status": {"State": "Enabled"}},
+            ]
+        }
+        src = _src()
+        with patch.object(src, "_chassis_ids", return_value=["1"]), \
+             patch.object(src, "_get", return_value=data):
+            readings = src.collect()
+        names = [r.sensor for r in readings]
+        assert "Broken" not in names
+        assert "Good" in names
+
+
+class TestBodyCap:
+    def test_oversized_body_raises(self):
+        """M3: the raw HTTP read is capped at 4 MB to prevent a hostile
+        BMC from streaming garbage into memory."""
+        from thermal_monitor.sources.redfish import _MAX_BODY_BYTES
+        src = _src()
+        # Simulate a response stream that returns more than the cap when
+        # asked for MAX+1 bytes — this mimics a server sending an oversize
+        # body that we haven't consumed yet.
+        fake_resp = MagicMock()
+        fake_resp.read.return_value = b"x" * (_MAX_BODY_BYTES + 1)
+        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
+        fake_resp.__exit__ = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            with pytest.raises(IOError, match="exceeded"):
+                src._get("/redfish/v1/Chassis")

@@ -85,6 +85,14 @@ class TestIpmitoolEnv:
         assert "-E" in cmd
         assert "-P" not in cmd
 
+    def test_base_cmd_omits_E_flag_without_password(self):
+        """L5: passing -E without IPMI_PASSWORD set causes ipmitool to fail
+        cryptically.  Only include -E when a password is actually set."""
+        src = _src(host="10.0.0.2", user="admin")   # no password
+        cmd = src._base_cmd()
+        assert "-E" not in cmd
+        assert "-P" not in cmd
+
 
 class TestCollect:
     def test_ipmitool_not_found(self):

@@ -203,6 +203,35 @@ class TestLoadConfig:
         sources, *_ = load_config(str(cfg))
         assert len(sources) == 1
 
+    def test_missing_name_skipped(self, tmp_path, caplog):
+        """L2: a source without a name would silently merge into an empty
+        bucket — skip it with a warning instead."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n  - type: local_sensors\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert sources == []
+        assert any("missing 'name'" in rec.getMessage() for rec in caplog.records)
+
+    def test_duplicate_names_warn(self, tmp_path, caplog):
+        """L2: duplicate source names cause silent reading merges and
+        shared cooldown — warn on load."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: Dup\n    type: local_sensors\n"
+            "  - name: Dup\n    type: local_sensors\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert len(sources) == 2   # both kept; only warned
+        assert any("Duplicate source name" in rec.getMessage()
+                   for rec in caplog.records)
+
     def test_env_state_file_override_missing_does_not_crash(self, tmp_path):
         """Regression test: THERMAL_MONITOR_STATE_FILE env var is consumed
         in cli.py, not here, but loading config with state_file set in YAML

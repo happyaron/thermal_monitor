@@ -2,6 +2,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import ssl
 import urllib.error
 import urllib.request
@@ -10,6 +11,13 @@ from thermal_monitor.sources.base import ThermalSource
 from thermal_monitor.models import ThermalReading
 
 log = logging.getLogger(__name__)
+
+# Hard cap on Redfish response body size.  Normal /Thermal payloads are a
+# few KB even on large chassis; anything over 4 MB is a misbehaving or
+# hostile BMC streaming garbage into our memory.  We still read up to this
+# cap because the 15 s timeout on urlopen() only bounds socket idle, not
+# total bytes transferred.
+_MAX_BODY_BYTES = 4 * 1024 * 1024
 
 
 class RedfishSource(ThermalSource):
@@ -74,7 +82,14 @@ class RedfishSource(ThermalSource):
         req.add_header("Authorization", f"Basic {cred}")
         req.add_header("Accept", "application/json")
         with urllib.request.urlopen(req, context=self._ssl_ctx(), timeout=15) as resp:
-            return json.loads(resp.read().decode())
+            # Read one byte past the cap so we can detect overflow without
+            # pulling the whole thing into memory.
+            body = resp.read(_MAX_BODY_BYTES + 1)
+            if len(body) > _MAX_BODY_BYTES:
+                raise IOError(
+                    f"Redfish response body exceeded {_MAX_BODY_BYTES} bytes"
+                )
+            return json.loads(body.decode())
 
     def _chassis_ids(self) -> List[str]:
         if self.chassis:
@@ -144,6 +159,12 @@ class RedfishSource(ThermalSource):
                     value = float(temp["ReadingCelsius"])
                 except (KeyError, TypeError, ValueError):
                     log.debug("[%s] sensor %r skipped (no ReadingCelsius)", self.name, temp.get("Name"))
+                    continue
+                # Drop NaN / Inf — some BMCs emit these for unpopulated sensors,
+                # and NaN >= threshold is always False (would silently report OK).
+                if not math.isfinite(value):
+                    log.debug("[%s] sensor %r skipped (non-finite reading %r)",
+                              self.name, temp.get("Name"), temp.get("ReadingCelsius"))
                     continue
 
                 sensor_name = temp.get("Name", "unknown")

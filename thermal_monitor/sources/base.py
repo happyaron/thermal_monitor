@@ -33,12 +33,25 @@ class ThermalSource(ABC):
     def _r(self, sensor: str, value: float,
            warn: Optional[float] = None,
            crit: Optional[float] = None) -> ThermalReading:
+        resolved_warn = warn if warn is not None else self.warn
+        resolved_crit = crit if crit is not None else self.crit
+        if resolved_warn >= resolved_crit:
+            # Can happen when a sensor-reported UCR is below the configured
+            # warn floor, or when config sets warn >= crit by mistake.
+            # Downgrade warn so WARN status can still trigger before CRIT —
+            # otherwise the whole WARN band is dead.
+            log.warning(
+                "[%s] %s: resolved warn=%.1f >= crit=%.1f — "
+                "adjusting warn to crit-1 so WARN status can trigger",
+                self.name, sensor, resolved_warn, resolved_crit,
+            )
+            resolved_warn = resolved_crit - 1
         return ThermalReading(
             source=self.name,
             sensor=sensor,
             value=round(value, 1),
-            warn=warn if warn is not None else self.warn,
-            crit=crit if crit is not None else self.crit,
+            warn=resolved_warn,
+            crit=resolved_crit,
         )
 
     def _err(self, sensor: str, msg: str) -> ThermalReading:
