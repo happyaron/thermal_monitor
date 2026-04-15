@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 from thermal_monitor.models import ThermalReading
 from thermal_monitor._ansi import _render_wecom_md, _yellow, _bold, _dim
+from thermal_monitor.io_utils import atomic_write_text
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,9 @@ def _load_state(path: str) -> dict:
 
 def _save_state(path: str, state: dict) -> None:
     try:
-        Path(path).write_text(json.dumps(state))
+        # Atomic replace — a SIGTERM mid-write can't leave a zero-length
+        # file, which _load_state would silently treat as "no cooldown".
+        atomic_write_text(path, json.dumps(state))
     except Exception as exc:
         log.warning("Could not save alert state: %s", exc)
 
@@ -171,6 +174,7 @@ def send_alerts(
 
     content = "\n".join(lines)
 
+    sent_ok = False
     if dry_run:
         mode_label = alerting_cfg.get("mode", "webhook")
         width = 62
@@ -182,6 +186,9 @@ def send_alerts(
             print()
             print(f"  {_yellow('@all')} {_bold('Critical thermal alert in equipment room! Please check immediately.')}")
         print(f"{'─' * width}\n")
+        # Dry-run counts as "sent" for cooldown purposes so the terminal
+        # preview isn't repeated every cycle.
+        sent_ok = True
     else:
         try:
             mode_label, send_fn = _make_sender(alerting_cfg)
@@ -192,9 +199,13 @@ def send_alerts(
         try:
             send_fn(content, has_crit, mention_all_on_crit)
             log.info("WeCom alert sent via %s for %d sensor(s)", mode_label, len(due))
+            sent_ok = True
         except Exception as exc:
             log.error("Failed to send WeCom alert via %s: %s", mode_label, exc)
 
-    # Update cooldown state regardless of dry_run so we don't spam the terminal.
-    for r in due:
-        state[r.alert_key] = now
+    # Advance per-sensor cooldown only when the send actually landed.  On
+    # failure we leave state[alert_key] untouched so the next polling cycle
+    # retries — the cycle interval is itself a natural rate limit.
+    if sent_ok:
+        for r in due:
+            state[r.alert_key] = now

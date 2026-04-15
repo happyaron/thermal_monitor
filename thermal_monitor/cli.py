@@ -16,6 +16,7 @@ from thermal_monitor.display_log import configure_log_output, emit_status_log
 from thermal_monitor.alerts import send_alerts, _load_state, _save_state
 from thermal_monitor.serialization import readings_to_dict
 from thermal_monitor.logging_db import _open_log_db, _write_log
+from thermal_monitor.io_utils import atomic_write_text
 from thermal_monitor.sources.base import ThermalSource
 
 log = logging.getLogger(__name__)
@@ -118,7 +119,13 @@ examples:
 
     max_workers = int(settings.get("max_workers", 0))
     jitter      = float(settings.get("jitter", 0.0))
-    state_file  = alerting_cfg.get("state_file", "/tmp/thermal_monitor_state.json")
+    # Resolution order: $THERMAL_MONITOR_STATE_FILE → YAML alerting.state_file
+    # → default under /tmp.  The env var is what the systemd unit uses so the
+    # shipped service works without YAML edits; PrivateTmp=yes would otherwise
+    # isolate /tmp per invocation and silently reset cooldown every cycle.
+    state_file  = (os.environ.get("THERMAL_MONITOR_STATE_FILE")
+                   or alerting_cfg.get("state_file")
+                   or "/tmp/thermal_monitor_state.json")
     state       = _load_state(state_file)
 
     log_conn: Optional[sqlite3.Connection] = None
@@ -146,7 +153,9 @@ examples:
             if json_to_stdout:
                 print(json_str)
             else:
-                Path(args.json).write_text(json_str + "\n")
+                # Atomic replace — the dashboard polls this file; a partial
+                # write during SIGTERM would give the browser invalid JSON.
+                atomic_write_text(args.json, json_str, newline_eof=True)
                 log.info("JSON written to %s", args.json)
         if args.log_format == "table":
             # Interactive: skip the table when piping JSON to stdout, otherwise

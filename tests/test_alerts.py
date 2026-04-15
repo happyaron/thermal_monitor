@@ -86,6 +86,60 @@ class TestSendAlerts:
         assert not any("@all" in line and "critical" in line.lower() for line in lines)
 
 
+class TestCooldownOnFailure:
+    """H1: a failed WeCom send must not advance the cooldown — otherwise
+    the next 5 minutes of WARN/CRIT readings get silently dropped."""
+
+    def test_successful_send_advances_cooldown(self):
+        r = make_reading(source="s", sensor="t", value=60.0, warn=40.0, crit=55.0)
+        state = {}
+        now = time.time()
+        # Patch the sender to succeed silently.
+        fake_send = MagicMock()
+        with patch("thermal_monitor.alerts._make_sender",
+                   return_value=("webhook", fake_send)):
+            send_alerts([r], _alerting_cfg(), state, now, dry_run=False)
+        fake_send.assert_called_once()
+        assert r.alert_key in state
+        assert abs(state[r.alert_key] - now) < 1.0
+
+    def test_failed_send_does_not_advance_cooldown(self):
+        r = make_reading(source="s", sensor="t", value=60.0, warn=40.0, crit=55.0)
+        state = {}
+        now = time.time()
+        # Patch the sender to raise — simulates a network error or WeCom 5xx.
+        fake_send = MagicMock(side_effect=RuntimeError("network down"))
+        with patch("thermal_monitor.alerts._make_sender",
+                   return_value=("webhook", fake_send)):
+            send_alerts([r], _alerting_cfg(), state, now, dry_run=False)
+        fake_send.assert_called_once()
+        # Cooldown unchanged → next cycle will retry.
+        assert r.alert_key not in state
+
+    def test_failed_send_then_success_is_not_suppressed(self):
+        """Transient failure, then recovery within cooldown window, should
+        allow the recovery cycle to actually send (not be suppressed)."""
+        r = make_reading(source="s", sensor="t", value=60.0, warn=40.0, crit=55.0)
+        state = {}
+        cfg = _alerting_cfg(alert_cooldown=300)
+
+        # Cycle 1: send fails, cooldown not advanced.
+        with patch("thermal_monitor.alerts._make_sender",
+                   return_value=("webhook",
+                                 MagicMock(side_effect=RuntimeError("timeout")))):
+            send_alerts([r], cfg, state, time.time(), dry_run=False)
+        assert state == {}
+
+        # Cycle 2: 30s later (well inside the 300s cooldown window) the send
+        # succeeds — the alert must NOT be suppressed.
+        success_sender = MagicMock()
+        with patch("thermal_monitor.alerts._make_sender",
+                   return_value=("webhook", success_sender)):
+            send_alerts([r], cfg, state, time.time() + 30, dry_run=False)
+        success_sender.assert_called_once()
+        assert r.alert_key in state
+
+
 class TestLoadSaveState:
     def test_load_nonexistent_returns_empty(self, tmp_path):
         state = _load_state(str(tmp_path / "missing.json"))

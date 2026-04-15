@@ -9,6 +9,26 @@ from thermal_monitor.sources.registry import SOURCE_TYPES
 log = logging.getLogger(__name__)
 
 
+# Config keys whose values get interpolated into argv for ssh / snmpget /
+# ipmitool.  A value beginning with "-" would be parsed as an option flag
+# (e.g. user "-oProxyCommand=sh_cmd" + host turns `ssh user@host` into
+# `ssh -oProxyCommand=sh_cmd@host` → local RCE).  Reject such values at
+# config-load time so the source is skipped before the subprocess runs.
+_ARGV_UNSAFE_KEYS = ("host", "user", "community", "interface")
+
+
+def _argv_injection_error(scfg: dict) -> Optional[str]:
+    """Return an error message if any argv-destined value starts with '-'."""
+    for k in _ARGV_UNSAFE_KEYS:
+        v = scfg.get(k)
+        if isinstance(v, str) and v.startswith("-"):
+            return (
+                f"{k}={v!r} starts with '-' — would be parsed as an option "
+                f"flag by ssh/snmpget/ipmitool (argv-injection risk)"
+            )
+    return None
+
+
 def expand_host_range(scfg: dict) -> List[dict]:
     """
     Expand a source block with ``host_range`` into one dict per host.
@@ -134,6 +154,11 @@ def load_config(path: str) -> Tuple[List[ThermalSource], dict, dict, dict]:
         cls = SOURCE_TYPES.get(stype)
         if cls is None:
             log.warning("Source #%d: unknown type %r — skipping", i, stype)
+            continue
+        argv_err = _argv_injection_error(merged)
+        if argv_err:
+            log.warning("Source #%d (%r): %s — skipping",
+                        i, merged.get("name", "?"), argv_err)
             continue
         try:
             src = cls(merged)

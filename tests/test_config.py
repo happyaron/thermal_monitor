@@ -136,6 +136,86 @@ class TestLoadConfig:
         assert len(sources) == 3
         assert all(isinstance(s, RedfishSource) for s in sources)
 
+    def test_rejects_host_starting_with_dash(self, tmp_path, caplog):
+        """H2: argv-injection defense — a host beginning with '-' would be
+        parsed as an option flag by snmpget/ssh/ipmitool."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: S\n    type: snmp\n    host: '-oProxyCommand=evil'\n"
+            "    community: public\n    version: '2c'\n    oids: []\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert sources == []
+        assert any("argv-injection" in rec.getMessage() for rec in caplog.records)
+
+    def test_rejects_user_starting_with_dash(self, tmp_path, caplog):
+        """A user field like '-oProxyCommand=...' would turn ssh user@host
+        into an option flag + @host remainder → local RCE via ProxyCommand."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: S\n    type: ssh_sensors\n    host: 10.0.0.1\n"
+            "    user: '-oProxyCommand=/bin/sh 1>&2'\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert sources == []
+        assert any("argv-injection" in rec.getMessage() for rec in caplog.records)
+
+    def test_rejects_community_starting_with_dash(self, tmp_path, caplog):
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: S\n    type: snmp\n    host: 10.0.0.1\n"
+            "    community: '-m ALL'\n    version: '2c'\n    oids: []\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert sources == []
+
+    def test_rejects_interface_starting_with_dash(self, tmp_path, caplog):
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: S\n    type: ipmi\n    host: 10.0.0.1\n"
+            "    user: admin\n    password: pw\n    interface: '-foo'\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        with caplog.at_level("WARNING"):
+            sources, *_ = load_config(str(cfg))
+        assert sources == []
+
+    def test_accepts_normal_host_values(self, tmp_path):
+        """Sanity check — the validator mustn't reject legitimate config."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n"
+            "  - name: S\n    type: snmp\n    host: '10.0.0.1'\n"
+            "    community: public\n    version: '2c'\n    oids:\n"
+            "      - {name: T, oid: '1.2.3.4'}\n"
+            "alerting: {}\nsettings: {}\nlogging: {}\n"
+        )
+        sources, *_ = load_config(str(cfg))
+        assert len(sources) == 1
+
+    def test_env_state_file_override_missing_does_not_crash(self, tmp_path):
+        """Regression test: THERMAL_MONITOR_STATE_FILE env var is consumed
+        in cli.py, not here, but loading config with state_file set in YAML
+        should still round-trip."""
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            "sources:\n  - name: S\n    type: local_sensors\n"
+            "alerting:\n  state_file: /tmp/custom_state.json\n"
+            "settings: {}\nlogging: {}\n"
+        )
+        _, alerting, *_ = load_config(str(cfg))
+        assert alerting["state_file"] == "/tmp/custom_state.json"
+
     def test_sensor_thresholds_deep_merged(self, tmp_path):
         cfg = tmp_path / "c.yaml"
         cfg.write_text(

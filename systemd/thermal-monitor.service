@@ -4,13 +4,13 @@
 #   1. Place the project at /opt/thermal_monitor (or override paths below).
 #   2. Create a service user:   sudo useradd -r -s /usr/sbin/nologin thermal-monitor
 #   3. Edit /etc/thermal_monitor/thermal_monitor.yaml (copy from the example).
-#      Point state_file and logging.db_file into /var/lib/thermal_monitor/:
-#          alerting:
-#            state_file: /var/lib/thermal_monitor/state.json
+#      Point logging.db_file into /var/lib/thermal_monitor/ so the SQLite
+#      reading log also lands in StateDirectory:
 #          logging:
-#            db_file:    /var/lib/thermal_monitor/readings.db
-#      (Required: PrivateTmp= gives each run its own /tmp, so cooldown state
-#      stored in /tmp would not survive between cycles.)
+#            db_file: /var/lib/thermal_monitor/readings.db
+#      (The alert-cooldown state_file is already handled for you via the
+#      $THERMAL_MONITOR_STATE_FILE env var set below — PrivateTmp=yes would
+#      otherwise isolate /tmp per run and reset the cooldown every cycle.)
 #   4. Install the units:
 #          sudo install -m 644 systemd/thermal-monitor.service /etc/systemd/system/
 #          sudo install -m 644 systemd/thermal-monitor.timer   /etc/systemd/system/
@@ -39,6 +39,14 @@ WorkingDirectory=/opt/thermal_monitor
 # Override these with a drop-in (systemctl edit) if your layout differs.
 Environment=CONFIG=/etc/thermal_monitor/thermal_monitor.yaml
 Environment=JSON_OUT=/var/lib/thermal_monitor/readings.json
+# $THERMAL_MONITOR_STATE_FILE overrides the YAML alerting.state_file setting
+# and the code default (/tmp/...).  Pointing it into StateDirectory makes the
+# shipped unit work without YAML edits — PrivateTmp=yes below would otherwise
+# wipe /tmp state every run and defeat the alert-cooldown logic.
+Environment=THERMAL_MONITOR_STATE_FILE=/var/lib/thermal_monitor/state.json
+# Don't litter /opt/thermal_monitor with .pyc files — ProtectSystem=strict
+# would make that write fail and spam journald with BytecodeError warnings.
+Environment=PYTHONDONTWRITEBYTECODE=1
 
 ExecStart=/opt/thermal_monitor/run_monitor.sh \
     -c ${CONFIG} \
