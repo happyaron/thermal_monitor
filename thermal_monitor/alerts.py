@@ -43,10 +43,13 @@ def _load_strings() -> dict:
             "crit_suffix":       lambda crit, _a=a: _fmt(_a.get("critSuffix",     ""), crit=f"{crit:.0f}"),
             "warn_suffix":       lambda warn, _a=a: _fmt(_a.get("warnSuffix",     ""), warn=f"{warn:.0f}"),
             "escalation":        a.get("escalation",        ""),
-            "resolved_header":   lambda ts, _a=a: _fmt(_a.get("resolvedHeader",   ""), ts=ts),
-            "resolved_subtitle": a.get("resolvedSubtitle",  ""),
-            "resolved_label":    a.get("resolvedLabel",     ""),
-            "resolved_suffix":   lambda prev, _a=a: _fmt(_a.get("resolvedSuffix", ""), prev=prev),
+            "resolved_header":    lambda ts, _a=a: _fmt(_a.get("resolvedHeader",   ""), ts=ts),
+            "resolved_subtitle":  a.get("resolvedSubtitle",  ""),
+            "resolved_label":     a.get("resolvedLabel",     ""),
+            "resolved_suffix":    lambda prev, _a=a: _fmt(_a.get("resolvedSuffix", ""), prev=prev),
+            "all_clear_header":   lambda ts, _a=a: _fmt(_a.get("allClearHeader",  ""), ts=ts),
+            "all_clear_subtitle": a.get("allClearSubtitle", ""),
+            "deesc_note":         a.get("deescNote",        ""),
         }
     return result
 
@@ -192,6 +195,7 @@ def send_alerts(
     _ord = {"WARN": 1, "CRIT": 2}
     triggered = [r for r in readings if r.status in ("WARN", "CRIT")]
     due = []
+    deescalated = set()  # alert_keys that transitioned CRIT → WARN this cycle
 
     for r in triggered:
         entry = state.get(r.alert_key)
@@ -213,6 +217,8 @@ def send_alerts(
         if is_new or is_escalated or is_deescalated:
             log.debug("alert: %s immediate [%s → %s]", r.alert_key, last_status, r.status)
             due.append(r)
+            if is_deescalated:
+                deescalated.add(r.alert_key)
         elif remaining <= 0:
             log.debug("alert: %s is due  [%s  %.1f°C]", r.alert_key, r.status, r.value)
             due.append(r)
@@ -226,18 +232,26 @@ def send_alerts(
     # ── Build message content ──────────────────────────────────────────────
     recovery_content = None
     if pending_recovery:
-        lines = [
-            S["resolved_header"](ts),
-            "",
-            f"> <font color=\"info\">{S['resolved_subtitle']}</font>",
-            "",
-            S["resolved_label"],
-        ]
-        for r, prev in pending_recovery:
-            lines.append(
-                f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**"
-                f"  {S['resolved_suffix'](prev)}"
-            )
+        all_clear = len(triggered) == 0
+        if all_clear:
+            lines = [
+                S["all_clear_header"](ts),
+                "",
+                f"> <font color=\"info\">{S['all_clear_subtitle']}</font>",
+            ]
+        else:
+            lines = [
+                S["resolved_header"](ts),
+                "",
+                f"> <font color=\"info\">{S['resolved_subtitle']}</font>",
+                "",
+                S["resolved_label"],
+            ]
+            for r, prev in pending_recovery:
+                lines.append(
+                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**"
+                    f"  {S['resolved_suffix'](prev)}"
+                )
         recovery_content = "\n".join(lines)
 
     alert_content = None
@@ -264,8 +278,9 @@ def send_alerts(
         if warn_readings:
             lines.append(S["warn_label"])
             for r in warn_readings:
+                note = f"  {S['deesc_note']}" if r.alert_key in deescalated else ""
                 lines.append(
-                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}"
+                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}{note}"
                 )
             lines.append("")
         alert_content = "\n".join(lines)

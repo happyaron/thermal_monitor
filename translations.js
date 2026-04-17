@@ -34,10 +34,13 @@ window.TRANSLATIONS = {
       "critSuffix":      "(crit: {crit}°C)",
       "warnSuffix":      "(warn: {warn}°C)",
       "escalation":      "🔥 Critical thermal alert in equipment room! Please check immediately.",
-      "resolvedHeader":  "## ✅ Thermal Alert Resolved — {ts}",
+      "resolvedHeader":   "## ✅ Thermal Alert Resolved — {ts}",
       "resolvedSubtitle": "The following sensors have returned to normal",
       "resolvedLabel":   "**✅ RESOLVED:**",
-      "resolvedSuffix":  "(was {prev})"
+      "resolvedSuffix":  "(was {prev})",
+      "allClearHeader":  "## ✅ All Clear — {ts}",
+      "allClearSubtitle": "All sensors have returned to normal",
+      "deescNote":       "↓ from CRIT"
     }
   },
   "zh": {
@@ -68,10 +71,13 @@ window.TRANSLATIONS = {
       "critSuffix":      "（严重阈值：{crit}°C）",
       "warnSuffix":      "（警告阈值：{warn}°C）",
       "escalation":      "🔥 机房温度严重告警，请立即检查！",
-      "resolvedHeader":  "## ✅ 温度告警已恢复 — {ts}",
+      "resolvedHeader":   "## ✅ 温度告警已恢复 — {ts}",
       "resolvedSubtitle": "以下传感器已恢复正常",
       "resolvedLabel":   "**✅ 已恢复：**",
-      "resolvedSuffix":  "（曾为 {prev}）"
+      "resolvedSuffix":  "（曾为 {prev}）",
+      "allClearHeader":  "## ✅ 全部恢复正常 — {ts}",
+      "allClearSubtitle": "所有传感器已恢复正常",
+      "deescNote":       "↓ 从严重降为警告"
     }
   },
   "ja": {
@@ -102,10 +108,13 @@ window.TRANSLATIONS = {
       "critSuffix":      "（重大閾値：{crit}°C）",
       "warnSuffix":      "（警告閾値：{warn}°C）",
       "escalation":      "🔥 機器室で重大な温度アラートが発生しました！直ちに確認してください！",
-      "resolvedHeader":  "## ✅ 温度アラート解消 — {ts}",
+      "resolvedHeader":   "## ✅ 温度アラート解消 — {ts}",
       "resolvedSubtitle": "以下のセンサーが正常に戻りました",
       "resolvedLabel":   "**✅ 解消：**",
-      "resolvedSuffix":  "（以前は {prev}）"
+      "resolvedSuffix":  "（以前は {prev}）",
+      "allClearHeader":  "## ✅ 全て正常 — {ts}",
+      "allClearSubtitle": "全てのセンサーが正常に戻りました",
+      "deescNote":       "↓ 重大から警告へ"
     }
   }
 };
