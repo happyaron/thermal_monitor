@@ -274,15 +274,18 @@ def send_alerts(
             continue
 
         # ── Existing sensor: escalation / de-escalation / cooldown ──────────
+        # De-escalation (CRIT→WARN) is intentionally NOT an immediate trigger:
+        # firing on every downgrade lets a flapping sensor spam every cycle.
+        # Instead, de-escalation is noted and annotated when cooldown fires.
         remaining = cooldown - (now - last_ts)
-        if is_escalated or is_deescalated:
-            log.debug("alert: %s immediate [%s → %s]", r.alert_key, last_status, r.status)
+        if is_escalated:
+            log.debug("alert: %s escalated [%s → %s], firing immediately", r.alert_key, last_status, r.status)
             due.append(r)
-            if is_deescalated:
-                deescalated.add(r.alert_key)
         elif remaining <= 0:
             log.debug("alert: %s is due  [%s  %.1f°C]", r.alert_key, r.status, r.value)
             due.append(r)
+            if is_deescalated:
+                deescalated.add(r.alert_key)
         else:
             log.debug("alert: %s suppressed by cooldown (%.0fs remaining)", r.alert_key, remaining)
 
