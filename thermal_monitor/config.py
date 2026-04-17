@@ -147,6 +147,10 @@ def load_config(path: str) -> Tuple[List[ThermalSource], dict, dict, dict]:
             **defaults.get("sensor_thresholds", {}),
             **scfg.get("sensor_thresholds", {}),
         }
+        # sensor_patterns: source-specific entries checked first (higher priority).
+        merged["sensor_patterns"] = (
+            scfg.get("sensor_patterns", []) + defaults.get("sensor_patterns", [])
+        )
         if not merged.get("enabled", True):
             log.debug("Source #%d (%r) is disabled — skipping", i, merged.get("name", "?"))
             continue
@@ -168,6 +172,7 @@ def load_config(path: str) -> Tuple[List[ThermalSource], dict, dict, dict]:
         try:
             src = cls(merged)
             src.sensor_thresholds = merged.get("sensor_thresholds", {})
+            src.sensor_patterns   = merged.get("sensor_patterns",   [])
             src.group = merged.get("_group")
             ps = merged.get("primary_sensor")
             if ps is not None and ps != "auto":

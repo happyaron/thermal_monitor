@@ -15,22 +15,33 @@ def _apply_sensor_thresholds(
     readings: List[ThermalReading],
     overrides: Dict[str, Dict],
     source_name: str,
+    patterns: list | None = None,
 ) -> List[ThermalReading]:
     """
-    Apply per-sensor warn/crit overrides from sensor_thresholds config.
+    Apply per-sensor warn/crit overrides.
 
-    Only exact sensor name matches are applied.
+    Priority:
+      1. sensor_thresholds  — exact sensor name match
+      2. sensor_patterns    — first entry whose "contains" substring matches (case-insensitive)
+      3. no match           — reading unchanged
 
     Returns a new list; originals are unchanged.
     """
     result = []
     for r in readings:
         override = overrides.get(r.sensor)
+        if override is None and patterns:
+            sensor_lower = r.sensor.lower()
+            for pat in patterns:
+                needle = str(pat.get("contains", "")).lower()
+                if needle and needle in sensor_lower:
+                    override = pat
+                    break
         if override:
             new_warn = float(override["warn"]) if "warn" in override else r.warn
             new_crit = float(override["crit"]) if "crit" in override else r.crit
             if new_warn >= new_crit:
-                log.warning("[%s] sensor_thresholds for %r: warn (%.0f) >= crit (%.0f) — override ignored",
+                log.warning("[%s] threshold override for %r: warn (%.0f) >= crit (%.0f) — override ignored",
                             source_name, r.sensor, new_warn, new_crit)
                 result.append(r)
             else:
@@ -58,8 +69,10 @@ def _collect_one(src: ThermalSource, jitter: float = 0.0) -> List[ThermalReading
     log.debug("--- collecting from source: %s (%s) ---", src.name, type(src).__name__)
     try:
         readings = src.collect()
-        if src.sensor_thresholds:
-            readings = _apply_sensor_thresholds(readings, src.sensor_thresholds, src.name)
+        if src.sensor_thresholds or src.sensor_patterns:
+            readings = _apply_sensor_thresholds(
+                readings, src.sensor_thresholds, src.name, src.sensor_patterns or None
+            )
         return readings
     except Exception as exc:   # pragma: no cover — belt-and-suspenders
         log.exception("Unhandled error in source %r", src.name)

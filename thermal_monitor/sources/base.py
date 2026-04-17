@@ -16,6 +16,11 @@ class ThermalSource(ABC):
         # appears in ThermalReading.sensor.  Applied after collect() returns.
         # Config key: sensor_thresholds: {"Sensor Name": {warn: N, crit: N}}
         self.sensor_thresholds: Dict[str, Dict] = {}
+        # Substring-match fallback for sensor_thresholds.  Each entry is a dict
+        # with a "contains" key (case-insensitive) plus warn/crit.  First match
+        # wins.  Exact sensor_thresholds takes priority over any pattern.
+        # Config key: sensor_patterns: [{contains: "P/S", warn: N, crit: N}]
+        self.sensor_patterns: List[Dict] = []
         # Set by load_config for host_range-expanded sources: the shared name
         # prefix used for group headers in display output (e.g. "HW Storage").
         self.group: Optional[str] = None

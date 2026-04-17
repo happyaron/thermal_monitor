@@ -165,6 +165,14 @@ sources:
     #   "54-P/S 1 Inlet": {warn: 45, crit: 60}
     #   "55-P/S 2 Inlet": {warn: 45, crit: 60}
 
+    # Substring-match fallback for groups of sensors that share a naming pattern.
+    # Checked only when sensor_thresholds has no exact match.  First matching
+    # entry wins (case-insensitive).  Works in defaults: too, to apply fleet-wide.
+    # sensor_patterns:
+    #   - {contains: "P/S",   warn: 38, crit: 50}   # matches P/S 1 Inlet, 54-P/S 2 Inlet, …
+    #   - {contains: "PS",    warn: 38, crit: 50}   # matches PS1 Inlet, PSU Inlet, …
+    #   - {contains: "Inlet", warn: 40, crit: 55}   # catch-all for remaining inlet sensors
+
     # Override which sensor is displayed as the summary ambient temperature.
     # Use when the auto heuristic picks the wrong sensor for this specific device.
     # primary_sensor: "01-Inlet Ambient Air"   # exact vendor sensor name

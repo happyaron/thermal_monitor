@@ -21,6 +21,41 @@ class TestApplySensorThresholds:
         result = _apply_sensor_thresholds([r], {"P/S": {"warn": 45, "crit": 60}}, "src")
         assert result[0] is r   # no match — unchanged
 
+    def test_pattern_matches_substring(self):
+        r = make_reading(sensor="P/S 1 Inlet", warn=30.0, crit=45.0)
+        patterns = [{"contains": "P/S", "warn": 38, "crit": 50}]
+        result = _apply_sensor_thresholds([r], {}, "src", patterns)
+        assert result[0].warn == 38.0
+        assert result[0].crit == 50.0
+
+    def test_pattern_case_insensitive(self):
+        r = make_reading(sensor="ps2 inlet", warn=30.0, crit=45.0)
+        patterns = [{"contains": "PS", "warn": 38, "crit": 50}]
+        result = _apply_sensor_thresholds([r], {}, "src", patterns)
+        assert result[0].warn == 38.0
+
+    def test_exact_beats_pattern(self):
+        r = make_reading(sensor="P/S 1 Inlet", warn=30.0, crit=45.0)
+        overrides = {"P/S 1 Inlet": {"warn": 99, "crit": 110}}
+        patterns  = [{"contains": "P/S", "warn": 38, "crit": 50}]
+        result = _apply_sensor_thresholds([r], overrides, "src", patterns)
+        assert result[0].warn == 99.0   # exact wins
+
+    def test_first_pattern_wins(self):
+        r = make_reading(sensor="P/S 2 Inlet", warn=30.0, crit=45.0)
+        patterns = [
+            {"contains": "P/S",   "warn": 38, "crit": 50},
+            {"contains": "Inlet", "warn": 42, "crit": 56},
+        ]
+        result = _apply_sensor_thresholds([r], {}, "src", patterns)
+        assert result[0].warn == 38.0   # first matching pattern wins
+
+    def test_pattern_no_match_unchanged(self):
+        r = make_reading(sensor="CPU Temp", warn=30.0, crit=45.0)
+        patterns = [{"contains": "P/S", "warn": 38, "crit": 50}]
+        result = _apply_sensor_thresholds([r], {}, "src", patterns)
+        assert result[0] is r
+
     def test_invalid_warn_ge_crit_ignored(self):
         r = make_reading(sensor="T", warn=30.0, crit=45.0)
         result = _apply_sensor_thresholds([r], {"T": {"warn": 60, "crit": 50}}, "src")
@@ -46,12 +81,13 @@ class TestApplySensorThresholds:
 
 class TestCollectOne:
     def _mock_source(self, readings=None, name="test", warn=30.0, crit=45.0,
-                     sensor_thresholds=None):
+                     sensor_thresholds=None, sensor_patterns=None):
         src = MagicMock()
         src.name = name
         src.warn = warn
         src.crit = crit
         src.sensor_thresholds = sensor_thresholds or {}
+        src.sensor_patterns   = sensor_patterns   or []
         src.collect.return_value = readings or [make_reading()]
         return src
 
@@ -84,6 +120,7 @@ class TestCollectAll:
             src.warn = 30.0
             src.crit = 45.0
             src.sensor_thresholds = {}
+            src.sensor_patterns   = []
             src.collect.return_value = [make_reading(source=f"src{i}")]
             sources.append(src)
 
