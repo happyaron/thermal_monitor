@@ -158,7 +158,7 @@ def send_alerts(
     Send a WeCom alert for any sensor in WARN or CRIT state, subject to
     per-sensor cooldown.  Updates ``state`` in-place.
     """
-    cooldown = float(alerting_cfg.get("alert_cooldown", 300))
+    cooldown = float(alerting_cfg.get("alert_cooldown", 900))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
     lang = alerting_cfg.get("language", "en")
     S = _STRINGS.get(lang, _STRINGS["en"])
@@ -168,16 +168,34 @@ def send_alerts(
         log.debug("alert: no sensors in WARN/CRIT — nothing to send")
         return
 
-    # Apply cooldown — only alert sensors not recently notified.
+    _ord = {"WARN": 1, "CRIT": 2}
+
+    # Alert immediately on new or escalated sensors; apply cooldown otherwise.
     due = []
     for r in triggered:
-        last = state.get(r.alert_key, 0)
-        remaining = cooldown - (now - last)
-        if remaining > 0:
-            log.debug("alert: %s suppressed by cooldown (%.0fs remaining)", r.alert_key, remaining)
+        entry = state.get(r.alert_key)
+
+        # Normalise state entry — support legacy plain-timestamp format.
+        if isinstance(entry, (int, float)):
+            last_ts, last_status = float(entry), None
+        elif isinstance(entry, dict):
+            last_ts     = float(entry.get("ts", 0))
+            last_status = entry.get("status")
         else:
+            last_ts, last_status = 0.0, None
+
+        is_new       = last_status is None
+        is_escalated = _ord.get(r.status, 0) > _ord.get(last_status, 0)
+        remaining    = cooldown - (now - last_ts)
+
+        if is_new or is_escalated:
+            log.debug("alert: %s immediate [%s → %s]", r.alert_key, last_status, r.status)
+            due.append(r)
+        elif remaining <= 0:
             log.debug("alert: %s is due  [%s  %.1f°C]", r.alert_key, r.status, r.value)
             due.append(r)
+        else:
+            log.debug("alert: %s suppressed by cooldown (%.0fs remaining)", r.alert_key, remaining)
     if not due:
         return
 
@@ -248,4 +266,4 @@ def send_alerts(
     # retries — the cycle interval is itself a natural rate limit.
     if sent_ok:
         for r in due:
-            state[r.alert_key] = now
+            state[r.alert_key] = {"ts": now, "status": r.status}
