@@ -280,7 +280,13 @@ alerting:
   # to_user: "@all"
 
   # ── Common ──────────────────────────────────────────────────────────────────
-  # Seconds before the same sensor can trigger another alert.
+  # How long a new sensor must sustain WARN/CRIT before the first alert fires.
+  # Prevents transient spikes and gradual-rise spam (Prometheus-style "for:").
+  # Escalations (WARN→CRIT) bypass this and fire immediately.
+  # 0 = disabled (fire immediately on first detection, legacy behaviour).
+  # alert_pending: 600   # 10 minutes
+
+  # Seconds before the same sensor can trigger another (repeat) alert.
   alert_cooldown: 300   # 5 minutes
 
   # When any sensor hits CRIT: webhook mode sends @all mention, app mode sends

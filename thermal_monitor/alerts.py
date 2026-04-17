@@ -183,11 +183,19 @@ def send_alerts(
     sensors that have been continuously OK for at least the cooldown period.
     Updates ``state`` in-place.
     """
-    cooldown = float(alerting_cfg.get("alert_cooldown", 900))
+    cooldown      = float(alerting_cfg.get("alert_cooldown", 900))
+    alert_pending = float(alerting_cfg.get("alert_pending",  0))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
     lang = alerting_cfg.get("language", "en")
     S = _STRINGS.get(lang, _STRINGS["en"])
     ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
+
+    if alert_pending > cooldown:
+        log.warning(
+            "alert_pending (%.0fs) > alert_cooldown (%.0fs): "
+            "the first notification will arrive later than subsequent repeats",
+            alert_pending, cooldown,
+        )
 
     # ── Recovery detection ─────────────────────────────────────────────────
     # Sensors that were WARN/CRIT and have been continuously OK for ≥cooldown.
@@ -196,6 +204,14 @@ def send_alerts(
 
     for key, entry in list(state.items()):
         if not isinstance(entry, dict):
+            continue
+        # Entries without "ts" are still in the alert-pending window — they have
+        # never actually fired an alert, so there is nothing to recover from.
+        if "ts" not in entry:
+            r = current_by_key.get(key)
+            if r is None or r.status == "OK":
+                log.debug("recovery: %s recovered during pending window (never alerted), discarding", key)
+                del state[key]
             continue
         r = current_by_key.get(key)
         if r is None or r.status != "OK":
@@ -219,19 +235,47 @@ def send_alerts(
 
         # Normalise state entry — support legacy plain-timestamp format.
         if isinstance(entry, (int, float)):
-            last_ts, last_status = float(entry), None
+            last_ts, last_status, pending_since = float(entry), None, None
         elif isinstance(entry, dict):
-            last_ts     = float(entry.get("ts", 0))
-            last_status = entry.get("status")
+            last_ts      = float(entry.get("ts", 0))
+            last_status  = entry.get("status")
+            pending_since = entry.get("pending_since")
         else:
-            last_ts, last_status = 0.0, None
+            last_ts, last_status, pending_since = 0.0, None, None
 
-        is_new         = last_status is None
         is_escalated   = _ord.get(r.status, 0) > _ord.get(last_status, 0)
         is_deescalated = _ord.get(r.status, 0) < _ord.get(last_status, 0)
-        remaining      = cooldown - (now - last_ts)
 
-        if is_new or is_escalated or is_deescalated:
+        # ── In the alert-pending window ──────────────────────────────────────
+        # pending_since is set and ts is 0 (no alert has fired yet).
+        if pending_since is not None and last_ts == 0:
+            if is_escalated:
+                log.debug("alert: %s escalated during pending [%s → %s], firing immediately",
+                          r.alert_key, last_status, r.status)
+                due.append(r)
+            elif now - pending_since >= alert_pending:
+                log.debug("alert: %s pending period elapsed (%.0fs), firing",
+                          r.alert_key, now - pending_since)
+                due.append(r)
+            else:
+                log.debug("alert: %s in pending (%.0fs / %.0fs elapsed)",
+                          r.alert_key, now - pending_since, alert_pending)
+            continue
+
+        # ── Brand-new sensor ─────────────────────────────────────────────────
+        is_new = last_status is None
+        if is_new:
+            if alert_pending > 0:
+                log.debug("alert: %s new, starting pending timer (%.0fs)", r.alert_key, alert_pending)
+                state[r.alert_key] = {"pending_since": now, "status": r.status}
+            else:
+                log.debug("alert: %s new, firing immediately", r.alert_key)
+                due.append(r)
+            continue
+
+        # ── Existing sensor: escalation / de-escalation / cooldown ──────────
+        remaining = cooldown - (now - last_ts)
+        if is_escalated or is_deescalated:
             log.debug("alert: %s immediate [%s → %s]", r.alert_key, last_status, r.status)
             due.append(r)
             if is_deescalated:
