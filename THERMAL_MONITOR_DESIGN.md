@@ -93,7 +93,7 @@ ThermalSource (ABC)
 
 Thresholds are resolved in a layered priority system (highest priority first):
 
-1. **`sensor_thresholds`** config overrides (exact name match, then longest substring match)
+1. **`sensor_thresholds`** config overrides (exact sensor name match)
 2. **Protocol-reported thresholds** (IPMI SDR UNC/UCR, Redfish UpperThreshold*)
 3. **Per-source `warn`/`crit`** in YAML
 4. **`defaults` section** `warn`/`crit`
@@ -119,7 +119,7 @@ The "primary sensor" determines the representative ambient temperature displayed
 ```yaml
 settings:          # Runtime tuning (max_workers, jitter)
 defaults:          # Global fallback values for all sources
-  sensor_thresholds:  # Pattern-based threshold overrides
+  sensor_thresholds:  # Exact-name threshold overrides
 sources:           # List of source definitions
   - name: "..."
     type: local_sensors | ssh_sensors | ipmi | redfish | snmp

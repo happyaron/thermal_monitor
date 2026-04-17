@@ -16,19 +16,10 @@ class TestApplySensorThresholds:
         assert result[0].warn == 35.0
         assert result[0].crit == 50.0
 
-    def test_substring_match(self):
+    def test_no_partial_name_match(self):
         r = make_reading(sensor="P/S 1 Inlet", warn=30.0, crit=45.0)
         result = _apply_sensor_thresholds([r], {"P/S": {"warn": 45, "crit": 60}}, "src")
-        assert result[0].warn == 45.0
-
-    def test_exact_beats_substring(self):
-        r = make_reading(sensor="P/S 1 Inlet", warn=30.0, crit=45.0)
-        overrides = {
-            "P/S": {"warn": 45, "crit": 60},
-            "P/S 1 Inlet": {"warn": 50, "crit": 65},
-        }
-        result = _apply_sensor_thresholds([r], overrides, "src")
-        assert result[0].warn == 50.0
+        assert result[0] is r   # no match — unchanged
 
     def test_invalid_warn_ge_crit_ignored(self):
         r = make_reading(sensor="T", warn=30.0, crit=45.0)

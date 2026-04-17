@@ -19,25 +19,13 @@ def _apply_sensor_thresholds(
     """
     Apply per-sensor warn/crit overrides from sensor_thresholds config.
 
-    Matching order (first match wins):
-      1. Exact key match              — "54-P/S 1 Inlet": {warn: 45}
-      2. Longest substring key match  — "P/S": {warn: 45}  matches any name
-                                        containing "P/S"
-
-    Substring keys let you set defaults for a whole sensor family (e.g. all
-    P/S or PS inlet sensors) without listing every sensor name explicitly.
-    Exact names always take precedence over substring patterns.
+    Only exact sensor name matches are applied.
 
     Returns a new list; originals are unchanged.
     """
     result = []
     for r in readings:
-        # Exact match first, then longest substring match.
         override = overrides.get(r.sensor)
-        if override is None:
-            matches = [k for k in overrides if k in r.sensor]
-            if matches:
-                override = overrides[max(matches, key=len)]
         if override:
             new_warn = float(override["warn"]) if "warn" in override else r.warn
             new_crit = float(override["crit"]) if "crit" in override else r.crit
