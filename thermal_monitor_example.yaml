@@ -289,6 +289,12 @@ alerting:
   # Seconds before the same sensor can trigger another (repeat) alert.
   alert_cooldown: 300   # 5 minutes
 
+  # Cap the number of sensors listed in a single alert or partial-recovery
+  # message.  When the cap is reached the message ends with "…and N more".
+  # CRIT sensors fill slots first; within each severity, hottest first.
+  # 0 (default) = unlimited.
+  # max_sensors_per_message: 20
+
   # When any sensor hits CRIT: webhook mode sends @all mention, app mode sends
   # a second broadcast text to to_user="@all" regardless of normal targeting.
   mention_all_on_crit: true

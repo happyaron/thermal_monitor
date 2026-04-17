@@ -52,6 +52,7 @@ def _load_strings() -> dict:
             "all_clear_header":   lambda ts, _a=a: _fmt(_a.get("allClearHeader",  ""), ts=ts),
             "all_clear_subtitle": a.get("allClearSubtitle", ""),
             "deesc_note":         a.get("deescNote",        ""),
+            "more_sensors":       lambda n, _a=a: _fmt(_a.get("moreSensors", "\u2026and {n} more"), n=n),
         }
     return result
 
@@ -171,6 +172,20 @@ def _build_overview(readings: List[ThermalReading], S: dict) -> str:
     return "> " + "  ·  ".join(parts)
 
 
+def _apply_sensor_cap(crit_readings, warn_readings, cap):
+    """Trim lists to fit within cap total sensors; CRIT fills first.
+
+    Returns (crit_shown, warn_shown, n_hidden).  cap=0 means unlimited.
+    """
+    if cap <= 0:
+        return crit_readings, warn_readings, 0
+    crit_shown = crit_readings[:cap]
+    remaining  = cap - len(crit_shown)
+    warn_shown = warn_readings[:remaining]
+    n_hidden   = (len(crit_readings) - len(crit_shown)) + (len(warn_readings) - len(warn_shown))
+    return crit_shown, warn_shown, n_hidden
+
+
 def send_alerts(
     readings: List[ThermalReading],
     alerting_cfg: dict,
@@ -183,8 +198,9 @@ def send_alerts(
     sensors that have been continuously OK for at least the cooldown period.
     Updates ``state`` in-place.
     """
-    cooldown      = float(alerting_cfg.get("alert_cooldown", 900))
-    alert_pending = float(alerting_cfg.get("alert_pending",  0))
+    cooldown             = float(alerting_cfg.get("alert_cooldown",        900))
+    alert_pending        = float(alerting_cfg.get("alert_pending",          0))
+    max_sensors          = int(alerting_cfg.get("max_sensors_per_message",  0))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
     lang = alerting_cfg.get("language", "en")
     S = _STRINGS.get(lang, _STRINGS["en"])
@@ -307,6 +323,17 @@ def send_alerts(
                 overview,
             ]
         else:
+            _prev_ord = {"CRIT": 2, "WARN": 1}
+            rec_sorted = sorted(
+                pending_recovery,
+                key=lambda x: (_prev_ord.get(x[1], 0), x[0].value),
+                reverse=True,
+            )
+            if max_sensors > 0:
+                rec_shown   = rec_sorted[:max_sensors]
+                rec_hidden  = len(rec_sorted) - len(rec_shown)
+            else:
+                rec_shown, rec_hidden = rec_sorted, 0
             lines = [
                 S["partial_header"](ts),
                 "",
@@ -315,11 +342,13 @@ def send_alerts(
                 "",
                 S["resolved_label"],
             ]
-            for r, prev in pending_recovery:
+            for r, prev in rec_shown:
                 lines.append(
                     f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**"
                     f"  {S['resolved_suffix'](prev)}"
                 )
+            if rec_hidden:
+                lines.append(S["more_sensors"](rec_hidden))
         recovery_content = "\n".join(lines)
 
     alert_content = None
@@ -334,23 +363,31 @@ def send_alerts(
             overview,
             "",
         ]
-        crit_readings = [r for r in due if r.status == "CRIT"]
-        warn_readings = [r for r in due if r.status == "WARN"]
-        if crit_readings:
+        crit_readings = sorted(
+            [r for r in due if r.status == "CRIT"], key=lambda r: r.value, reverse=True
+        )
+        warn_readings = sorted(
+            [r for r in due if r.status == "WARN"], key=lambda r: r.value, reverse=True
+        )
+        crit_shown, warn_shown, n_hidden = _apply_sensor_cap(crit_readings, warn_readings, max_sensors)
+        if crit_shown:
             lines.append(S["crit_label"])
-            for r in crit_readings:
+            for r in crit_shown:
                 lines.append(
                     f"- <font color=\"warning\">{r.source} / {r.sensor}: "
                     f"**{r.value:.1f}°C**</font>  {S['crit_suffix'](r.crit)}"
                 )
             lines.append("")
-        if warn_readings:
+        if warn_shown:
             lines.append(S["warn_label"])
-            for r in warn_readings:
+            for r in warn_shown:
                 note = f"  {S['deesc_note']}" if r.alert_key in deescalated else ""
                 lines.append(
                     f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}{note}"
                 )
+            lines.append("")
+        if n_hidden:
+            lines.append(S["more_sensors"](n_hidden))
             lines.append("")
         alert_content = "\n".join(lines)
 

@@ -42,7 +42,8 @@ window.TRANSLATIONS = {
       "resolvedSuffix":  "(was {prev})",
       "allClearHeader":  "## ✅ All Clear — {ts}",
       "allClearSubtitle": "All sensors have returned to normal",
-      "deescNote":       "↓ from CRIT"
+      "deescNote":       "↓ from CRIT",
+      "moreSensors":     "…and {n} more"
     }
   },
   "zh": {
@@ -81,7 +82,8 @@ window.TRANSLATIONS = {
       "resolvedSuffix":  "（曾为 {prev}）",
       "allClearHeader":  "## ✅ 全部恢复正常 — {ts}",
       "allClearSubtitle": "所有传感器已恢复正常",
-      "deescNote":       "↓ 从严重降为警告"
+      "deescNote":       "↓ 从严重降为警告",
+      "moreSensors":     "……以及另外 {n} 个传感器"
     }
   },
   "ja": {
@@ -120,7 +122,8 @@ window.TRANSLATIONS = {
       "resolvedSuffix":  "（以前は {prev}）",
       "allClearHeader":  "## ✅ 全て正常 — {ts}",
       "allClearSubtitle": "全てのセンサーが正常に戻りました",
-      "deescNote":       "↓ 重大から警告へ"
+      "deescNote":       "↓ 重大から警告へ",
+      "moreSensors":     "…他 {n} 件のセンサー"
     }
   }
 };
