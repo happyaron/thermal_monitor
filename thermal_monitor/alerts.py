@@ -199,6 +199,7 @@ def send_alerts(
     Updates ``state`` in-place.
     """
     cooldown             = float(alerting_cfg.get("alert_cooldown",        900))
+    cooldown_crit        = float(alerting_cfg.get("alert_cooldown_crit",   cooldown))
     alert_pending        = float(alerting_cfg.get("alert_pending",          0))
     max_sensors          = int(alerting_cfg.get("max_sensors_per_message",  0))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
@@ -206,6 +207,12 @@ def send_alerts(
     S = _STRINGS.get(lang, _STRINGS["en"])
     ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
 
+    if cooldown_crit > cooldown:
+        log.warning(
+            "alert_cooldown_crit (%.0fs) > alert_cooldown (%.0fs): "
+            "CRIT sensors will repeat less often than WARN sensors",
+            cooldown_crit, cooldown,
+        )
     if alert_pending > cooldown:
         log.warning(
             "alert_pending (%.0fs) > alert_cooldown (%.0fs): "
@@ -293,7 +300,8 @@ def send_alerts(
         # De-escalation (CRIT→WARN) is intentionally NOT an immediate trigger:
         # firing on every downgrade lets a flapping sensor spam every cycle.
         # Instead, de-escalation is noted and annotated when cooldown fires.
-        remaining = cooldown - (now - last_ts)
+        effective_cooldown = cooldown_crit if last_status == "CRIT" else cooldown
+        remaining = effective_cooldown - (now - last_ts)
         if is_escalated:
             log.debug("alert: %s escalated [%s → %s], firing immediately", r.alert_key, last_status, r.status)
             due.append(r)
@@ -303,7 +311,8 @@ def send_alerts(
             if is_deescalated:
                 deescalated.add(r.alert_key)
         else:
-            log.debug("alert: %s suppressed by cooldown (%.0fs remaining)", r.alert_key, remaining)
+            log.debug("alert: %s suppressed by cooldown (%.0fs remaining, effective %.0fs)",
+                      r.alert_key, remaining, effective_cooldown)
 
     if not due and not pending_recovery:
         log.debug("alert: nothing to send")

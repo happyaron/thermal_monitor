@@ -287,7 +287,12 @@ alerting:
   # alert_pending: 600   # 10 minutes
 
   # Seconds before the same sensor can trigger another (repeat) alert.
-  alert_cooldown: 300   # 5 minutes
+  alert_cooldown: 1800   # 30 minutes (WARN repeat interval)
+
+  # Independent repeat interval for sensors that are already in CRIT state.
+  # Lets CRIT sensors page more aggressively than long-duration WARN repeats.
+  # Defaults to alert_cooldown when omitted.
+  # alert_cooldown_crit: 600   # 10 minutes — CRIT pages every 10 min
 
   # Cap the number of sensors listed in a single alert or partial-recovery
   # message.  When the cap is reached the message ends with "…and N more".
