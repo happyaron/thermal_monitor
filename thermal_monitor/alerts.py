@@ -180,7 +180,7 @@ def send_alerts(
 ) -> None:
     """
     Send WeCom alerts for sensors in WARN/CRIT and recovery notifications for
-    sensors that have returned to OK for at least 2 consecutive cycles.
+    sensors that have been continuously OK for at least the cooldown period.
     Updates ``state`` in-place.
     """
     cooldown = float(alerting_cfg.get("alert_cooldown", 900))
@@ -190,7 +190,7 @@ def send_alerts(
     ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
 
     # ── Recovery detection ─────────────────────────────────────────────────
-    # Sensors that were WARN/CRIT and are now OK for ≥2 consecutive cycles.
+    # Sensors that were WARN/CRIT and have been continuously OK for ≥cooldown.
     current_by_key = {r.alert_key: r for r in readings}
     pending_recovery = []  # [(reading, prev_status)]
 
@@ -199,11 +199,13 @@ def send_alerts(
             continue
         r = current_by_key.get(key)
         if r is None or r.status != "OK":
-            entry.pop("ok_streak", None)  # still alerting or missing — reset streak
+            entry.pop("first_ok_ts", None)  # still alerting or missing — reset
             continue
-        entry["ok_streak"] = entry.get("ok_streak", 0) + 1
-        log.debug("recovery: %s ok_streak=%d", key, entry["ok_streak"])
-        if entry["ok_streak"] >= 2:
+        if "first_ok_ts" not in entry:
+            entry["first_ok_ts"] = now
+        elapsed = now - entry["first_ok_ts"]
+        log.debug("recovery: %s ok for %.0fs / %.0fs cooldown", key, elapsed, cooldown)
+        if elapsed >= cooldown:
             pending_recovery.append((r, entry.get("status", "?")))
 
     # ── Alert detection ────────────────────────────────────────────────────
