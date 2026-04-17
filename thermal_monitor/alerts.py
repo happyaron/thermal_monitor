@@ -34,15 +34,19 @@ def _load_strings() -> dict:
     for lang, groups in raw.items():
         a = groups.get("alerts", {})
         result[lang] = {
-            "header":       lambda ts, _a=a: _fmt(_a.get("header",       ""), ts=ts),
-            "crit_header":  lambda ts, _a=a: _fmt(_a.get("critHeader",   ""), ts=ts),
-            "subtitle":     a.get("subtitle",     ""),
-            "crit_subtitle": a.get("critSubtitle", a.get("subtitle", "")),
-            "crit_label":   a.get("critLabel",    ""),
-            "warn_label":   a.get("warnLabel",    ""),
-            "crit_suffix":  lambda crit, _a=a: _fmt(_a.get("critSuffix", ""), crit=f"{crit:.0f}"),
-            "warn_suffix":  lambda warn, _a=a: _fmt(_a.get("warnSuffix", ""), warn=f"{warn:.0f}"),
-            "escalation":   a.get("escalation",   ""),
+            "header":            lambda ts, _a=a: _fmt(_a.get("header",           ""), ts=ts),
+            "crit_header":       lambda ts, _a=a: _fmt(_a.get("critHeader",       ""), ts=ts),
+            "subtitle":          a.get("subtitle",          ""),
+            "crit_subtitle":     a.get("critSubtitle",      a.get("subtitle", "")),
+            "crit_label":        a.get("critLabel",         ""),
+            "warn_label":        a.get("warnLabel",         ""),
+            "crit_suffix":       lambda crit, _a=a: _fmt(_a.get("critSuffix",     ""), crit=f"{crit:.0f}"),
+            "warn_suffix":       lambda warn, _a=a: _fmt(_a.get("warnSuffix",     ""), warn=f"{warn:.0f}"),
+            "escalation":        a.get("escalation",        ""),
+            "resolved_header":   lambda ts, _a=a: _fmt(_a.get("resolvedHeader",   ""), ts=ts),
+            "resolved_subtitle": a.get("resolvedSubtitle",  ""),
+            "resolved_label":    a.get("resolvedLabel",     ""),
+            "resolved_suffix":   lambda prev, _a=a: _fmt(_a.get("resolvedSuffix", ""), prev=prev),
         }
     return result
 
@@ -157,23 +161,38 @@ def send_alerts(
     dry_run: bool = False,
 ) -> None:
     """
-    Send a WeCom alert for any sensor in WARN or CRIT state, subject to
-    per-sensor cooldown.  Updates ``state`` in-place.
+    Send WeCom alerts for sensors in WARN/CRIT and recovery notifications for
+    sensors that have returned to OK for at least 2 consecutive cycles.
+    Updates ``state`` in-place.
     """
     cooldown = float(alerting_cfg.get("alert_cooldown", 900))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
     lang = alerting_cfg.get("language", "en")
     S = _STRINGS.get(lang, _STRINGS["en"])
+    ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
 
-    triggered = [r for r in readings if r.status in ("WARN", "CRIT")]
-    if not triggered:
-        log.debug("alert: no sensors in WARN/CRIT — nothing to send")
-        return
+    # ── Recovery detection ─────────────────────────────────────────────────
+    # Sensors that were WARN/CRIT and are now OK for ≥2 consecutive cycles.
+    current_by_key = {r.alert_key: r for r in readings}
+    pending_recovery = []  # [(reading, prev_status)]
 
+    for key, entry in list(state.items()):
+        if not isinstance(entry, dict):
+            continue
+        r = current_by_key.get(key)
+        if r is None or r.status != "OK":
+            entry.pop("ok_streak", None)  # still alerting or missing — reset streak
+            continue
+        entry["ok_streak"] = entry.get("ok_streak", 0) + 1
+        log.debug("recovery: %s ok_streak=%d", key, entry["ok_streak"])
+        if entry["ok_streak"] >= 2:
+            pending_recovery.append((r, entry.get("status", "?")))
+
+    # ── Alert detection ────────────────────────────────────────────────────
     _ord = {"WARN": 1, "CRIT": 2}
-
-    # Alert immediately on new or escalated sensors; apply cooldown otherwise.
+    triggered = [r for r in readings if r.status in ("WARN", "CRIT")]
     due = []
+
     for r in triggered:
         entry = state.get(r.alert_key)
 
@@ -186,11 +205,12 @@ def send_alerts(
         else:
             last_ts, last_status = 0.0, None
 
-        is_new       = last_status is None
-        is_escalated = _ord.get(r.status, 0) > _ord.get(last_status, 0)
-        remaining    = cooldown - (now - last_ts)
+        is_new         = last_status is None
+        is_escalated   = _ord.get(r.status, 0) > _ord.get(last_status, 0)
+        is_deescalated = _ord.get(r.status, 0) < _ord.get(last_status, 0)
+        remaining      = cooldown - (now - last_ts)
 
-        if is_new or is_escalated:
+        if is_new or is_escalated or is_deescalated:
             log.debug("alert: %s immediate [%s → %s]", r.alert_key, last_status, r.status)
             due.append(r)
         elif remaining <= 0:
@@ -198,57 +218,84 @@ def send_alerts(
             due.append(r)
         else:
             log.debug("alert: %s suppressed by cooldown (%.0fs remaining)", r.alert_key, remaining)
-    if not due:
+
+    if not due and not pending_recovery:
+        log.debug("alert: nothing to send")
         return
 
-    has_crit = any(r.status == "CRIT" for r in due)
-    ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
-
-    # Build WeCom Markdown message (tables unsupported, use list format).
-    lines = [
-        S["crit_header"](ts) if has_crit else S["header"](ts),
-        "",
-        f"> <font color=\"{'warning' if has_crit else 'comment'}\">"
-        f"{S['crit_subtitle'] if has_crit else S['subtitle']}</font>",
-        "",
-    ]
-
-    crit_readings = [r for r in due if r.status == "CRIT"]
-    warn_readings = [r for r in due if r.status == "WARN"]
-
-    if crit_readings:
-        lines.append(S["crit_label"])
-        for r in crit_readings:
+    # ── Build message content ──────────────────────────────────────────────
+    recovery_content = None
+    if pending_recovery:
+        lines = [
+            S["resolved_header"](ts),
+            "",
+            f"> <font color=\"info\">{S['resolved_subtitle']}</font>",
+            "",
+            S["resolved_label"],
+        ]
+        for r, prev in pending_recovery:
             lines.append(
-                f"- <font color=\"warning\">{r.source} / {r.sensor}: "
-                f"**{r.value:.1f}°C**</font>  {S['crit_suffix'](r.crit)}"
+                f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**"
+                f"  {S['resolved_suffix'](prev)}"
             )
-        lines.append("")
-    if warn_readings:
-        lines.append(S["warn_label"])
-        for r in warn_readings:
-            lines.append(
-                f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}"
-            )
-        lines.append("")
+        recovery_content = "\n".join(lines)
 
-    content = "\n".join(lines)
+    alert_content = None
+    has_crit = False
+    if due:
+        has_crit = any(r.status == "CRIT" for r in due)
+        lines = [
+            S["crit_header"](ts) if has_crit else S["header"](ts),
+            "",
+            f"> <font color=\"{'warning' if has_crit else 'comment'}\">"
+            f"{S['crit_subtitle'] if has_crit else S['subtitle']}</font>",
+            "",
+        ]
+        crit_readings = [r for r in due if r.status == "CRIT"]
+        warn_readings = [r for r in due if r.status == "WARN"]
+        if crit_readings:
+            lines.append(S["crit_label"])
+            for r in crit_readings:
+                lines.append(
+                    f"- <font color=\"warning\">{r.source} / {r.sensor}: "
+                    f"**{r.value:.1f}°C**</font>  {S['crit_suffix'](r.crit)}"
+                )
+            lines.append("")
+        if warn_readings:
+            lines.append(S["warn_label"])
+            for r in warn_readings:
+                lines.append(
+                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}"
+                )
+            lines.append("")
+        alert_content = "\n".join(lines)
 
-    sent_ok = False
+    # ── Send ───────────────────────────────────────────────────────────────
+    # Recovery is sent first so the alert card (if any) lands last and shows
+    # in the chat preview.  State is only updated on successful send.
+    recovery_sent = False
+    alert_sent    = False
+
     if dry_run:
         mode_label = alerting_cfg.get("mode", "webhook")
         width = 62
-        print(f"\n{'─' * width}")
-        print(_dim(f"  WeCom message preview  [{mode_label}]  (not sent)"))
-        print(f"{'─' * width}")
-        print(_render_wecom_md(content))
-        if has_crit and mention_all_on_crit:
-            print()
-            print(f"  {_yellow('@all')} {_bold(S['escalation'])}")
-        print(f"{'─' * width}\n")
-        # Dry-run counts as "sent" for cooldown purposes so the terminal
-        # preview isn't repeated every cycle.
-        sent_ok = True
+        if recovery_content:
+            print(f"\n{'─' * width}")
+            print(_dim(f"  WeCom recovery preview  [{mode_label}]  (not sent)"))
+            print(f"{'─' * width}")
+            print(_render_wecom_md(recovery_content))
+            print(f"{'─' * width}\n")
+        if alert_content:
+            print(f"\n{'─' * width}")
+            print(_dim(f"  WeCom message preview  [{mode_label}]  (not sent)"))
+            print(f"{'─' * width}")
+            print(_render_wecom_md(alert_content))
+            if has_crit and mention_all_on_crit:
+                print()
+                print(f"  {_yellow('@all')} {_bold(S['escalation'])}")
+            print(f"{'─' * width}\n")
+        recovery_sent = True
+        alert_sent    = True
     else:
         try:
             mode_label, send_fn = _make_sender(alerting_cfg, S["escalation"])
@@ -256,16 +303,28 @@ def send_alerts(
             log.error("Cannot send alert: %s", exc)
             return
 
-        try:
-            send_fn(content, has_crit, mention_all_on_crit)
-            log.info("WeCom alert sent via %s for %d sensor(s)", mode_label, len(due))
-            sent_ok = True
-        except Exception as exc:
-            log.error("Failed to send WeCom alert via %s: %s", mode_label, exc)
+        if recovery_content:
+            try:
+                send_fn(recovery_content, False, False)
+                log.info("WeCom recovery sent via %s for %d sensor(s)",
+                         mode_label, len(pending_recovery))
+                recovery_sent = True
+            except Exception as exc:
+                log.error("Failed to send recovery notification via %s: %s", mode_label, exc)
 
-    # Advance per-sensor cooldown only when the send actually landed.  On
-    # failure we leave state[alert_key] untouched so the next polling cycle
-    # retries — the cycle interval is itself a natural rate limit.
-    if sent_ok:
+        if alert_content:
+            try:
+                send_fn(alert_content, has_crit, mention_all_on_crit)
+                log.info("WeCom alert sent via %s for %d sensor(s)", mode_label, len(due))
+                alert_sent = True
+            except Exception as exc:
+                log.error("Failed to send WeCom alert via %s: %s", mode_label, exc)
+
+    if recovery_sent:
+        for r, _ in pending_recovery:
+            del state[r.alert_key]
+
+    # On failure, leave state untouched so the next cycle retries.
+    if alert_sent:
         for r in due:
             state[r.alert_key] = {"ts": now, "status": r.status}

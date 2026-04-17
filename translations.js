@@ -31,9 +31,13 @@ window.TRANSLATIONS = {
       "critSubtitle": "Equipment room CRITICAL temperature — immediate action required",
       "critLabel":    "**🔥 CRITICAL:**",
       "warnLabel":    "**⚠️ WARNING:**",
-      "critSuffix":   "(crit: {crit}°C)",
-      "warnSuffix":   "(warn: {warn}°C)",
-      "escalation":   "🔥 Critical thermal alert in equipment room! Please check immediately."
+      "critSuffix":      "(crit: {crit}°C)",
+      "warnSuffix":      "(warn: {warn}°C)",
+      "escalation":      "🔥 Critical thermal alert in equipment room! Please check immediately.",
+      "resolvedHeader":  "## ✅ Thermal Alert Resolved — {ts}",
+      "resolvedSubtitle": "The following sensors have returned to normal",
+      "resolvedLabel":   "**✅ RESOLVED:**",
+      "resolvedSuffix":  "(was {prev})"
     }
   },
   "zh": {
@@ -61,9 +65,13 @@ window.TRANSLATIONS = {
       "critSubtitle": "机房温度严重异常，请立即处理",
       "critLabel":    "**🔥 严重：**",
       "warnLabel":    "**⚠️ 警告：**",
-      "critSuffix":   "（严重阈值：{crit}°C）",
-      "warnSuffix":   "（警告阈值：{warn}°C）",
-      "escalation":   "🔥 机房温度严重告警，请立即检查！"
+      "critSuffix":      "（严重阈值：{crit}°C）",
+      "warnSuffix":      "（警告阈值：{warn}°C）",
+      "escalation":      "🔥 机房温度严重告警，请立即检查！",
+      "resolvedHeader":  "## ✅ 温度告警已恢复 — {ts}",
+      "resolvedSubtitle": "以下传感器已恢复正常",
+      "resolvedLabel":   "**✅ 已恢复：**",
+      "resolvedSuffix":  "（曾为 {prev}）"
     }
   },
   "ja": {
@@ -91,9 +99,13 @@ window.TRANSLATIONS = {
       "critSubtitle": "機器室で重大な温度異常が発生しています。直ちに対処してください",
       "critLabel":    "**🔥 重大：**",
       "warnLabel":    "**⚠️ 警告：**",
-      "critSuffix":   "（重大閾値：{crit}°C）",
-      "warnSuffix":   "（警告閾値：{warn}°C）",
-      "escalation":   "🔥 機器室で重大な温度アラートが発生しました！直ちに確認してください！"
+      "critSuffix":      "（重大閾値：{crit}°C）",
+      "warnSuffix":      "（警告閾値：{warn}°C）",
+      "escalation":      "🔥 機器室で重大な温度アラートが発生しました！直ちに確認してください！",
+      "resolvedHeader":  "## ✅ 温度アラート解消 — {ts}",
+      "resolvedSubtitle": "以下のセンサーが正常に戻りました",
+      "resolvedLabel":   "**✅ 解消：**",
+      "resolvedSuffix":  "（以前は {prev}）"
     }
   }
 };
