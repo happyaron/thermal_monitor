@@ -34,6 +34,7 @@
   let expanded = new Set();
   let userCollapsed = new Set();
   let collapsedGroups = new Set();
+  let userCollapsedGroups = new Set();
   let expandedGroups  = new Set();
   let sortCol = "name";
   let sortAsc = true;
@@ -168,9 +169,10 @@
 
     for (const [grp, gs] of Object.entries(groupStats)) {
       if (gs.worstOrd > 0) {
-        collapsedGroups.delete(grp);
-      } else if (!expandedGroups.has(grp)) {
-        collapsedGroups.add(grp);
+        if (!userCollapsedGroups.has(grp)) collapsedGroups.delete(grp);
+      } else {
+        if (!expandedGroups.has(grp)) collapsedGroups.add(grp);
+        userCollapsedGroups.delete(grp);
       }
     }
 
@@ -321,9 +323,11 @@
       if (collapsedGroups.has(grp)) {
         collapsedGroups.delete(grp);
         expandedGroups.add(grp);
+        userCollapsedGroups.delete(grp);
       } else {
         collapsedGroups.add(grp);
         expandedGroups.delete(grp);
+        userCollapsedGroups.add(grp);
       }
       render();
       return;
