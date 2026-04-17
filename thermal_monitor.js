@@ -215,9 +215,8 @@
       if (grp && collapsedGroups.has(grp)) continue;
 
       const isNonOk    = (statusOrd[src.status] ?? 0) > 0;
-      if (isNonOk && !userCollapsed.has(src.name)) expanded.add(src.name);
-      if (!isNonOk) { expanded.delete(src.name); userCollapsed.delete(src.name); }
-      const isExp      = expanded.has(src.name);
+      if (!isNonOk) userCollapsed.delete(src.name);
+      const isExp      = expanded.has(src.name) || (isNonOk && !userCollapsed.has(src.name));
       const cls        = statusCls[src.status];
       const hasDetail  = src.sensors.length > 0;
       const expandable = hasDetail ? "expandable" : "";
