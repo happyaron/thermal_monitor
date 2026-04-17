@@ -43,8 +43,8 @@ def _load_strings() -> dict:
             "crit_suffix":       lambda crit, _a=a: _fmt(_a.get("critSuffix",     ""), crit=f"{crit:.0f}"),
             "warn_suffix":       lambda warn, _a=a: _fmt(_a.get("warnSuffix",     ""), warn=f"{warn:.0f}"),
             "escalation":        a.get("escalation",        ""),
-            "resolved_header":    lambda ts, _a=a: _fmt(_a.get("resolvedHeader",   ""), ts=ts),
-            "resolved_subtitle":  a.get("resolvedSubtitle",  ""),
+            "partial_header":      lambda ts, _a=a: _fmt(_a.get("partialHeader",    ""), ts=ts),
+            "partial_subtitle":   a.get("partialSubtitle",   ""),
             "resolved_label":     a.get("resolvedLabel",     ""),
             "resolved_suffix":    lambda prev, _a=a: _fmt(_a.get("resolvedSuffix", ""), prev=prev),
             "all_clear_header":   lambda ts, _a=a: _fmt(_a.get("allClearHeader",  ""), ts=ts),
@@ -241,9 +241,9 @@ def send_alerts(
             ]
         else:
             lines = [
-                S["resolved_header"](ts),
+                S["partial_header"](ts),
                 "",
-                f"> <font color=\"info\">{S['resolved_subtitle']}</font>",
+                f"> <font color=\"comment\">{S['partial_subtitle']}</font>",
                 "",
                 S["resolved_label"],
             ]
