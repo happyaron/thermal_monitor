@@ -39,7 +39,8 @@ class TestSendAlerts:
     def test_cooldown_suppresses_repeated_alert(self, capsys):
         r = make_reading(source="s", sensor="t", value=60.0, warn=40.0, crit=55.0)
         now = time.time()
-        state = {r.alert_key: now - 10}   # alerted 10s ago, cooldown=300s
+        # Use dict format so last_status is known (plain float → is_new=True → fires)
+        state = {r.alert_key: {"ts": now - 10, "status": "CRIT"}}
         send_alerts([r], _alerting_cfg(alert_cooldown=300), state, now, dry_run=True)
         out = capsys.readouterr().out
         assert out == ""
@@ -58,7 +59,9 @@ class TestSendAlerts:
         now = time.time()
         send_alerts([r], _alerting_cfg(), state, now, dry_run=True)
         assert r.alert_key in state
-        assert abs(state[r.alert_key] - now) < 1.0
+        entry = state[r.alert_key]
+        assert abs(entry["ts"] - now) < 1.0
+        assert entry["status"] == "CRIT"
 
     def test_state_updated_even_in_dry_run(self):
         """Dry-run must update state to prevent terminal spam."""
@@ -101,7 +104,7 @@ class TestCooldownOnFailure:
             send_alerts([r], _alerting_cfg(), state, now, dry_run=False)
         fake_send.assert_called_once()
         assert r.alert_key in state
-        assert abs(state[r.alert_key] - now) < 1.0
+        assert abs(state[r.alert_key]["ts"] - now) < 1.0
 
     def test_failed_send_does_not_advance_cooldown(self):
         r = make_reading(source="s", sensor="t", value=60.0, warn=40.0, crit=55.0)

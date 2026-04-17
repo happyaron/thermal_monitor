@@ -43,6 +43,8 @@ def _load_strings() -> dict:
             "crit_suffix":       lambda crit, _a=a: _fmt(_a.get("critSuffix",     ""), crit=f"{crit:.0f}"),
             "warn_suffix":       lambda warn, _a=a: _fmt(_a.get("warnSuffix",     ""), warn=f"{warn:.0f}"),
             "escalation":        a.get("escalation",        ""),
+            "overview_sources":    lambda n,  _a=a: _fmt(_a.get("overviewSources",   ""), n=n),
+            "overview_sensors":    lambda n,  _a=a: _fmt(_a.get("overviewSensors",   ""), n=n),
             "partial_header":      lambda ts, _a=a: _fmt(_a.get("partialHeader",    ""), ts=ts),
             "partial_subtitle":   a.get("partialSubtitle",   ""),
             "resolved_label":     a.get("resolvedLabel",     ""),
@@ -156,6 +158,19 @@ def _make_sender(alerting_cfg: dict, escalation_text: str):
     return label, _send
 
 
+def _build_overview(readings: List[ThermalReading], S: dict) -> str:
+    from collections import Counter
+    n_sources = len(set(r.source for r in readings))
+    n_sensors = len(readings)
+    counts = Counter(r.status for r in readings)
+    parts = [S["overview_sources"](n_sources), S["overview_sensors"](n_sensors)]
+    if counts.get("CRIT"):  parts.append(f"🔥 {counts['CRIT']} CRIT")
+    if counts.get("WARN"):  parts.append(f"⚠️ {counts['WARN']} WARN")
+    if counts.get("ERROR"): parts.append(f"❌ {counts['ERROR']} ERR")
+    if counts.get("OK"):    parts.append(f"✅ {counts['OK']} OK")
+    return "> " + "  ·  ".join(parts)
+
+
 def send_alerts(
     readings: List[ThermalReading],
     alerting_cfg: dict,
@@ -230,6 +245,8 @@ def send_alerts(
         return
 
     # ── Build message content ──────────────────────────────────────────────
+    overview = _build_overview(readings, S)
+
     recovery_content = None
     if pending_recovery:
         all_clear = len(triggered) == 0
@@ -238,12 +255,14 @@ def send_alerts(
                 S["all_clear_header"](ts),
                 "",
                 f"> <font color=\"info\">{S['all_clear_subtitle']}</font>",
+                overview,
             ]
         else:
             lines = [
                 S["partial_header"](ts),
                 "",
                 f"> <font color=\"comment\">{S['partial_subtitle']}</font>",
+                overview,
                 "",
                 S["resolved_label"],
             ]
@@ -263,6 +282,7 @@ def send_alerts(
             "",
             f"> <font color=\"{'warning' if has_crit else 'comment'}\">"
             f"{S['crit_subtitle'] if has_crit else S['subtitle']}</font>",
+            overview,
             "",
         ]
         crit_readings = [r for r in due if r.status == "CRIT"]
