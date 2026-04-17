@@ -52,7 +52,8 @@ def _load_strings() -> dict:
             "all_clear_header":   lambda ts, _a=a: _fmt(_a.get("allClearHeader",  ""), ts=ts),
             "all_clear_subtitle": a.get("allClearSubtitle", ""),
             "deesc_note":         a.get("deescNote",        ""),
-            "more_sensors":       lambda n, _a=a: _fmt(_a.get("moreSensors", "\u2026and {n} more"), n=n),
+            "more_sensors":       lambda n, _a=a: _fmt(_a.get("moreSensors",  "\u2026and {n} more"), n=n),
+            "ongoing_label":      lambda n, _a=a: _fmt(_a.get("ongoingLabel", "**\U0001f4ca Also alerting ({n} active):**"), n=n),
         }
     return result
 
@@ -172,6 +173,20 @@ def _build_overview(readings: List[ThermalReading], S: dict) -> str:
     return "> " + "  ·  ".join(parts)
 
 
+_DEFAULT_ONGOING_CAP = 5
+
+
+def _delta_str(current: float, prev) -> str:
+    """Arrow + previous value string, empty when no previous reading is known."""
+    if prev is None:
+        return ""
+    if current > prev + 0.05:
+        return f" \u2191{prev:.1f}\u00b0C"
+    if current < prev - 0.05:
+        return f" \u2193{prev:.1f}\u00b0C"
+    return f" \u2192{prev:.1f}\u00b0C"
+
+
 def _apply_sensor_cap(crit_readings, warn_readings, cap):
     """Trim lists to fit within cap total sensors; CRIT fills first.
 
@@ -245,26 +260,32 @@ def send_alerts(
         elapsed = now - entry["first_ok_ts"]
         log.debug("recovery: %s ok for %.0fs / %.0fs cooldown", key, elapsed, cooldown)
         if elapsed >= cooldown:
-            pending_recovery.append((r, entry.get("status", "?")))
+            pending_recovery.append((r, entry.get("status", "?"), entry.get("value")))
 
     # ── Alert detection ────────────────────────────────────────────────────
     _ord = {"WARN": 1, "CRIT": 2}
     triggered = [r for r in readings if r.status in ("WARN", "CRIT")]
     due = []
     deescalated = set()  # alert_keys that transitioned CRIT → WARN this cycle
+    suppressed  = []     # [(reading, last_value)] — in cooldown, not firing this cycle
+    prev_vals   = {}     # alert_key → value at last fired alert (for delta display)
 
     for r in triggered:
         entry = state.get(r.alert_key)
 
         # Normalise state entry — support legacy plain-timestamp format.
         if isinstance(entry, (int, float)):
-            last_ts, last_status, pending_since = float(entry), None, None
+            last_ts, last_status, pending_since, last_value = float(entry), None, None, None
         elif isinstance(entry, dict):
             last_ts      = float(entry.get("ts", 0))
             last_status  = entry.get("status")
             pending_since = entry.get("pending_since")
+            last_value   = float(entry["value"]) if entry.get("value") is not None else None
         else:
-            last_ts, last_status, pending_since = 0.0, None, None
+            last_ts, last_status, pending_since, last_value = 0.0, None, None, None
+
+        if last_value is not None:
+            prev_vals[r.alert_key] = last_value
 
         is_escalated   = _ord.get(r.status, 0) > _ord.get(last_status, 0)
         is_deescalated = _ord.get(r.status, 0) < _ord.get(last_status, 0)
@@ -313,6 +334,7 @@ def send_alerts(
         else:
             log.debug("alert: %s suppressed by cooldown (%.0fs remaining, effective %.0fs)",
                       r.alert_key, remaining, effective_cooldown)
+            suppressed.append((r, last_value))
 
     if not due and not pending_recovery:
         log.debug("alert: nothing to send")
@@ -351,11 +373,10 @@ def send_alerts(
                 "",
                 S["resolved_label"],
             ]
-            for r, prev in rec_shown:
-                lines.append(
-                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**"
-                    f"  {S['resolved_suffix'](prev)}"
-                )
+            for r, prev, prev_val in rec_shown:
+                suffix = (f" (was {prev_val:.1f}\u00b0C {prev})"
+                          if prev_val is not None else f"  {S['resolved_suffix'](prev)}")
+                lines.append(f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**{suffix}")
             if rec_hidden:
                 lines.append(S["more_sensors"](rec_hidden))
         recovery_content = "\n".join(lines)
@@ -382,22 +403,56 @@ def send_alerts(
         if crit_shown:
             lines.append(S["crit_label"])
             for r in crit_shown:
+                delta = _delta_str(r.value, prev_vals.get(r.alert_key))
                 lines.append(
                     f"- <font color=\"warning\">{r.source} / {r.sensor}: "
-                    f"**{r.value:.1f}°C**</font>  {S['crit_suffix'](r.crit)}"
+                    f"**{r.value:.1f}°C**{delta}</font>  {S['crit_suffix'](r.crit)}"
                 )
             lines.append("")
         if warn_shown:
             lines.append(S["warn_label"])
             for r in warn_shown:
-                note = f"  {S['deesc_note']}" if r.alert_key in deescalated else ""
+                delta = _delta_str(r.value, prev_vals.get(r.alert_key))
+                note  = f"  {S['deesc_note']}" if r.alert_key in deescalated else ""
                 lines.append(
-                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}{note}"
+                    f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**{delta}  {S['warn_suffix'](r.warn)}{note}"
                 )
             lines.append("")
         if n_hidden:
             lines.append(S["more_sensors"](n_hidden))
             lines.append("")
+
+        # ── "Also alerting" — suppressed sensors in remaining cap slots ──────
+        if suppressed:
+            if max_sensors > 0:
+                ongoing_cap = max_sensors - len(crit_shown) - len(warn_shown)
+            else:
+                ongoing_cap = _DEFAULT_ONGOING_CAP
+            if ongoing_cap > 0:
+                ongoing_sorted = sorted(
+                    suppressed,
+                    key=lambda x: (_ord.get(x[0].status, 0), x[0].value),
+                    reverse=True,
+                )
+                ongoing_shown  = ongoing_sorted[:ongoing_cap]
+                ongoing_hidden = len(suppressed) - len(ongoing_shown)
+                lines.append(S["ongoing_label"](len(suppressed)))
+                for r, last_val in ongoing_shown:
+                    delta = _delta_str(r.value, last_val)
+                    thr   = S["crit_suffix"](r.crit) if r.status == "CRIT" else S["warn_suffix"](r.warn)
+                    if r.status == "CRIT":
+                        lines.append(
+                            f"- <font color=\"warning\">{r.source} / {r.sensor}: "
+                            f"**{r.value:.1f}°C**{delta}</font>  {thr}"
+                        )
+                    else:
+                        lines.append(
+                            f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**{delta}  {thr}"
+                        )
+                if ongoing_hidden:
+                    lines.append(S["more_sensors"](ongoing_hidden))
+                lines.append("")
+
         alert_content = "\n".join(lines)
 
     # ── Send ───────────────────────────────────────────────────────────────
@@ -451,10 +506,10 @@ def send_alerts(
                 log.error("Failed to send WeCom alert via %s: %s", mode_label, exc)
 
     if recovery_sent:
-        for r, _ in pending_recovery:
+        for r, _, __ in pending_recovery:
             del state[r.alert_key]
 
     # On failure, leave state untouched so the next cycle retries.
     if alert_sent:
         for r in due:
-            state[r.alert_key] = {"ts": now, "status": r.status}
+            state[r.alert_key] = {"ts": now, "status": r.status, "value": r.value}
