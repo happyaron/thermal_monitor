@@ -25,13 +25,15 @@ window.TRANSLATIONS = {
       "status":      { "OK": "OK", "WARN": "WARN", "CRIT": "CRIT", "ERROR": "ERROR" }
     },
     "alerts": {
-      "header":     "## {icon} Thermal Alert — {ts}",
-      "subtitle":   "Equipment room temperature warning",
-      "critLabel":  "**🔥 CRITICAL:**",
-      "warnLabel":  "**⚠️ WARNING:**",
-      "critSuffix": "(crit: {crit}°C)",
-      "warnSuffix": "(warn: {warn}°C)",
-      "escalation": "🔥 Critical thermal alert in equipment room! Please check immediately."
+      "header":       "## ⚠️ Thermal Alert — {ts}",
+      "critHeader":   "## 🔥 CRITICAL THERMAL ALERT — {ts}",
+      "subtitle":     "Equipment room temperature warning",
+      "critSubtitle": "Equipment room CRITICAL temperature — immediate action required",
+      "critLabel":    "**🔥 CRITICAL:**",
+      "warnLabel":    "**⚠️ WARNING:**",
+      "critSuffix":   "(crit: {crit}°C)",
+      "warnSuffix":   "(warn: {warn}°C)",
+      "escalation":   "🔥 Critical thermal alert in equipment room! Please check immediately."
     }
   },
   "zh": {
@@ -53,13 +55,15 @@ window.TRANSLATIONS = {
       "status":      { "OK": "正常", "WARN": "警告", "CRIT": "严重", "ERROR": "错误" }
     },
     "alerts": {
-      "header":     "## {icon} 温度告警 — {ts}",
-      "subtitle":   "机房温度异常",
-      "critLabel":  "**🔥 严重：**",
-      "warnLabel":  "**⚠️ 警告：**",
-      "critSuffix": "（严重阈值：{crit}°C）",
-      "warnSuffix": "（警告阈值：{warn}°C）",
-      "escalation": "🔥 机房温度严重告警，请立即检查！"
+      "header":       "## ⚠️ 温度告警 — {ts}",
+      "critHeader":   "## 🔥 严重温度告警 — {ts}",
+      "subtitle":     "机房温度异常",
+      "critSubtitle": "机房温度严重异常，请立即处理",
+      "critLabel":    "**🔥 严重：**",
+      "warnLabel":    "**⚠️ 警告：**",
+      "critSuffix":   "（严重阈值：{crit}°C）",
+      "warnSuffix":   "（警告阈值：{warn}°C）",
+      "escalation":   "🔥 机房温度严重告警，请立即检查！"
     }
   },
   "ja": {
@@ -81,13 +85,15 @@ window.TRANSLATIONS = {
       "status":      { "OK": "正常", "WARN": "警告", "CRIT": "重大", "ERROR": "エラー" }
     },
     "alerts": {
-      "header":     "## {icon} 温度アラート — {ts}",
-      "subtitle":   "機器室の温度異常",
-      "critLabel":  "**🔥 重大：**",
-      "warnLabel":  "**⚠️ 警告：**",
-      "critSuffix": "（重大閾値：{crit}°C）",
-      "warnSuffix": "（警告閾値：{warn}°C）",
-      "escalation": "🔥 機器室で重大な温度アラートが発生しました！直ちに確認してください！"
+      "header":       "## ⚠️ 温度アラート — {ts}",
+      "critHeader":   "## 🔥 重大温度アラート — {ts}",
+      "subtitle":     "機器室の温度異常",
+      "critSubtitle": "機器室で重大な温度異常が発生しています。直ちに対処してください",
+      "critLabel":    "**🔥 重大：**",
+      "warnLabel":    "**⚠️ 警告：**",
+      "critSuffix":   "（重大閾値：{crit}°C）",
+      "warnSuffix":   "（警告閾値：{warn}°C）",
+      "escalation":   "🔥 機器室で重大な温度アラートが発生しました！直ちに確認してください！"
     }
   }
 };

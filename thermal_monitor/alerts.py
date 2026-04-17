@@ -34,13 +34,15 @@ def _load_strings() -> dict:
     for lang, groups in raw.items():
         a = groups.get("alerts", {})
         result[lang] = {
-            "header":      lambda icon, ts, _a=a: _fmt(_a.get("header", ""), icon=icon, ts=ts),
-            "subtitle":    a.get("subtitle", ""),
-            "crit_label":  a.get("critLabel", ""),
-            "warn_label":  a.get("warnLabel", ""),
-            "crit_suffix": lambda crit, _a=a: _fmt(_a.get("critSuffix", ""), crit=f"{crit:.0f}"),
-            "warn_suffix": lambda warn, _a=a: _fmt(_a.get("warnSuffix", ""), warn=f"{warn:.0f}"),
-            "escalation":  a.get("escalation", ""),
+            "header":       lambda ts, _a=a: _fmt(_a.get("header",       ""), ts=ts),
+            "crit_header":  lambda ts, _a=a: _fmt(_a.get("critHeader",   ""), ts=ts),
+            "subtitle":     a.get("subtitle",     ""),
+            "crit_subtitle": a.get("critSubtitle", a.get("subtitle", "")),
+            "crit_label":   a.get("critLabel",    ""),
+            "warn_label":   a.get("warnLabel",    ""),
+            "crit_suffix":  lambda crit, _a=a: _fmt(_a.get("critSuffix", ""), crit=f"{crit:.0f}"),
+            "warn_suffix":  lambda warn, _a=a: _fmt(_a.get("warnSuffix", ""), warn=f"{warn:.0f}"),
+            "escalation":   a.get("escalation",   ""),
         }
     return result
 
@@ -107,12 +109,12 @@ def _make_sender(alerting_cfg: dict, escalation_text: str):
         label = "webhook"
 
         def _send(content: str, has_crit: bool, mention_all: bool) -> None:
-            bot.send_markdown(content)
             if has_crit and mention_all:
                 bot.send_text(
                     escalation_text,
                     mentioned_list=["@all"],
                 )
+            bot.send_markdown(content)
 
     elif mode == "app":
         corp_id     = (alerting_cfg.get("corp_id")
@@ -130,14 +132,14 @@ def _make_sender(alerting_cfg: dict, escalation_text: str):
         label    = f"app → {to_user or to_party or to_tag}"
 
         def _send(content: str, has_crit: bool, mention_all: bool) -> None:
-            app.send_markdown(content, to_user=to_user,
-                              to_party=to_party, to_tag=to_tag)
             if has_crit and mention_all:
                 # Escalate: broadcast a plain-text nudge to everyone.
                 app.send_text(
                     escalation_text,
                     to_user="@all",
                 )
+            app.send_markdown(content, to_user=to_user,
+                              to_party=to_party, to_tag=to_tag)
 
     else:
         raise ValueError(
@@ -201,13 +203,13 @@ def send_alerts(
 
     has_crit = any(r.status == "CRIT" for r in due)
     ts = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
-    icon = "🔥" if has_crit else "⚠️"
 
     # Build WeCom Markdown message (tables unsupported, use list format).
     lines = [
-        S["header"](icon, ts),
+        S["crit_header"](ts) if has_crit else S["header"](ts),
         "",
-        f"> <font color=\"{'warning' if has_crit else 'comment'}\">{S['subtitle']}</font>",
+        f"> <font color=\"{'warning' if has_crit else 'comment'}\">"
+        f"{S['crit_subtitle'] if has_crit else S['subtitle']}</font>",
         "",
     ]
 
