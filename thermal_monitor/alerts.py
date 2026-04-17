@@ -14,6 +14,40 @@ from thermal_monitor.io_utils import atomic_write_text
 log = logging.getLogger(__name__)
 
 
+def _fmt(template: str, **kwargs) -> str:
+    import re
+    return re.sub(r"\{(\w+)\}", lambda m: str(kwargs.get(m.group(1), "")), template)
+
+
+def _load_strings() -> dict:
+    import re
+    import json as _json
+    js_file = Path(__file__).parent.parent / "translations.js"
+    try:
+        text = js_file.read_text(encoding="utf-8")
+        raw = _json.loads(re.search(r"window\.TRANSLATIONS\s*=\s*(\{[\s\S]*\})\s*;", text).group(1))
+    except Exception as exc:
+        log.warning("Could not load translations.js: %s — alert text will be empty", exc)
+        raw = {}
+
+    result: dict = {}
+    for lang, groups in raw.items():
+        a = groups.get("alerts", {})
+        result[lang] = {
+            "header":      lambda icon, ts, _a=a: _fmt(_a.get("header", ""), icon=icon, ts=ts),
+            "subtitle":    a.get("subtitle", ""),
+            "crit_label":  a.get("critLabel", ""),
+            "warn_label":  a.get("warnLabel", ""),
+            "crit_suffix": lambda crit, _a=a: _fmt(_a.get("critSuffix", ""), crit=f"{crit:.0f}"),
+            "warn_suffix": lambda warn, _a=a: _fmt(_a.get("warnSuffix", ""), warn=f"{warn:.0f}"),
+            "escalation":  a.get("escalation", ""),
+        }
+    return result
+
+
+_STRINGS = _load_strings()
+
+
 def _load_state(path: str) -> dict:
     try:
         return json.loads(Path(path).read_text())
@@ -30,7 +64,7 @@ def _save_state(path: str, state: dict) -> None:
         log.warning("Could not save alert state: %s", exc)
 
 
-def _make_sender(alerting_cfg: dict):
+def _make_sender(alerting_cfg: dict, escalation_text: str):
     """
     Build and return a sender callable based on alerting_cfg["mode"].
 
@@ -76,7 +110,7 @@ def _make_sender(alerting_cfg: dict):
             bot.send_markdown(content)
             if has_crit and mention_all:
                 bot.send_text(
-                    "🔥 Critical thermal alert in equipment room! Please check immediately.",
+                    escalation_text,
                     mentioned_list=["@all"],
                 )
 
@@ -101,7 +135,7 @@ def _make_sender(alerting_cfg: dict):
             if has_crit and mention_all:
                 # Escalate: broadcast a plain-text nudge to everyone.
                 app.send_text(
-                    "🔥 Critical thermal alert in equipment room! Please check immediately.",
+                    escalation_text,
                     to_user="@all",
                 )
 
@@ -126,6 +160,8 @@ def send_alerts(
     """
     cooldown = float(alerting_cfg.get("alert_cooldown", 300))
     mention_all_on_crit = bool(alerting_cfg.get("mention_all_on_crit", True))
+    lang = alerting_cfg.get("language", "en")
+    S = _STRINGS.get(lang, _STRINGS["en"])
 
     triggered = [r for r in readings if r.status in ("WARN", "CRIT")]
     if not triggered:
@@ -151,9 +187,9 @@ def send_alerts(
 
     # Build WeCom Markdown message (tables unsupported, use list format).
     lines = [
-        f"## {icon} Thermal Alert — {ts}",
+        S["header"](icon, ts),
         "",
-        f"> <font color=\"{'warning' if has_crit else 'comment'}\">Equipment room temperature warning</font>",
+        f"> <font color=\"{'warning' if has_crit else 'comment'}\">{S['subtitle']}</font>",
         "",
     ]
 
@@ -161,18 +197,18 @@ def send_alerts(
     warn_readings = [r for r in due if r.status == "WARN"]
 
     if crit_readings:
-        lines.append("**🔥 CRITICAL:**")
+        lines.append(S["crit_label"])
         for r in crit_readings:
             lines.append(
                 f"- <font color=\"warning\">{r.source} / {r.sensor}: "
-                f"**{r.value:.1f}°C**</font>  (crit: {r.crit:.0f}°C)"
+                f"**{r.value:.1f}°C**</font>  {S['crit_suffix'](r.crit)}"
             )
         lines.append("")
     if warn_readings:
-        lines.append("**⚠️ WARNING:**")
+        lines.append(S["warn_label"])
         for r in warn_readings:
             lines.append(
-                f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  (warn: {r.warn:.0f}°C)"
+                f"- {r.source} / {r.sensor}: **{r.value:.1f}°C**  {S['warn_suffix'](r.warn)}"
             )
         lines.append("")
 
@@ -188,14 +224,14 @@ def send_alerts(
         print(_render_wecom_md(content))
         if has_crit and mention_all_on_crit:
             print()
-            print(f"  {_yellow('@all')} {_bold('Critical thermal alert in equipment room! Please check immediately.')}")
+            print(f"  {_yellow('@all')} {_bold(S['escalation'])}")
         print(f"{'─' * width}\n")
         # Dry-run counts as "sent" for cooldown purposes so the terminal
         # preview isn't repeated every cycle.
         sent_ok = True
     else:
         try:
-            mode_label, send_fn = _make_sender(alerting_cfg)
+            mode_label, send_fn = _make_sender(alerting_cfg, S["escalation"])
         except (ValueError, RuntimeError) as exc:
             log.error("Cannot send alert: %s", exc)
             return

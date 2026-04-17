@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thermal Monitor</title>
+<title>温度监控</title>
 <style>
   :root {
     --bg:       #1a1a2e;
@@ -18,14 +18,14 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: "SF Mono", "Cascadia Code", "Fira Code", Menlo, monospace;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SF Mono", "Cascadia Code", Menlo, monospace;
     font-size: 14px;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
   }
 
-  /* ── Header ──────────────────────────────────────────── */
+  /* ── 页眉 ──────────────────────────────────────────── */
   header {
     display: flex;
     align-items: center;
@@ -45,7 +45,7 @@
   .dot.stale { background: var(--warn); }
   .dot.error { background: var(--crit); }
 
-  /* ── Summary bar ─────────────────────────────────────── */
+  /* ── 摘要栏 ─────────────────────────────────────── */
   .summary {
     display: flex;
     gap: 16px;
@@ -69,7 +69,7 @@
   .chip.crit .n { color: var(--crit); }
   .chip.err  .n { color: var(--err); }
 
-  /* ── Controls ────────────────────────────────────────── */
+  /* ── 控制栏 ────────────────────────────────────────── */
   .controls {
     display: flex;
     align-items: center;
@@ -100,7 +100,7 @@
   }
   .controls button:hover { border-color: var(--text); }
 
-  /* ── Table ───────────────────────────────────────────── */
+  /* ── 表格 ───────────────────────────────────────────── */
   .table-wrap { padding: 8px 24px 24px; }
   table {
     width: 100%;
@@ -119,14 +119,14 @@
     user-select: none;
   }
   th:hover { color: var(--text); }
-  /* column widths */
+  /* 列宽 */
   th:nth-child(1), td:nth-child(1) { width: 40%; }
   th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }
   th:nth-child(3), td:nth-child(3) { width: 12%; text-align: right; }
   th:nth-child(4), td:nth-child(4) { width: 12%; text-align: right; }
   th:nth-child(5), td:nth-child(5) { width: 21%; }
 
-  /* source row */
+  /* 数据源行 */
   tr.source td {
     padding: 7px 10px;
     border-bottom: 1px solid var(--border);
@@ -137,7 +137,7 @@
   tr.source:hover td { background: rgba(255,255,255,0.03); }
   tr.source.expandable { cursor: pointer; }
 
-  /* group header row — same column grid as data rows */
+  /* 分组标题行 */
   tr.group-header td {
     padding: 7px 10px;
     font-size: 13px;
@@ -154,7 +154,6 @@
   }
   tr.group-header:hover td { background: rgba(15, 52, 96, 0.7); }
   tr.group-header:first-child td { border-top: none; }
-  /* left-border accent on group headers (same palette as source rows) */
   tr.group-header.row-ok   td:first-child { border-left: 3px solid rgba(74,222,128,0.6); }
   tr.group-header.row-warn td:first-child { border-left: 3px solid rgba(250,204,21,0.6); }
   tr.group-header.row-crit td:first-child { border-left: 3px solid rgba(248,113,113,0.6); }
@@ -168,14 +167,14 @@
   tr.group-header.collapsed .group-toggle { transform: rotate(-90deg); }
   .group-count { font-size: 11px; font-weight: 400; color: var(--dim); margin-left: 4px; }
 
-  /* group separator (between standalone clusters) */
+  /* 分组间隔 */
   tr.group-gap td {
     padding: 0;
     height: 8px;
     border: none;
   }
 
-  /* sensor detail rows */
+  /* 传感器详情行 */
   tr.sensor td {
     padding: 4px 10px 4px 36px;
     font-size: 12px;
@@ -185,7 +184,7 @@
   tr.sensor td:first-child { padding-left: 36px; }
   tr.sensor:last-of-type td { border-bottom: 1px solid var(--border); }
 
-  /* status badges */
+  /* 状态标签 */
   .badge {
     display: inline-block;
     padding: 2px 8px;
@@ -199,12 +198,12 @@
   .badge.crit { background: rgba(248,113,113,0.15); color: var(--crit); }
   .badge.err  { background: rgba(148,163,184,0.12); color: var(--err); }
 
-  /* temperature coloring */
+  /* 温度颜色 */
   .temp-ok   { color: var(--text); }
   .temp-warn { color: var(--warn); }
   .temp-crit { color: var(--crit); }
 
-  /* trailing expand hint on expandable source rows */
+  /* 展开提示箭头 */
   .expand-hint {
     display: inline-block;
     font-size: 9px;
@@ -216,20 +215,20 @@
   }
   tr.source.expanded .expand-hint { transform: rotate(180deg); opacity: 0.8; }
 
-  /* colored left-border accent for all source rows */
+  /* 数据源行左侧颜色边框 */
   tr.source td:first-child { border-left: 3px solid transparent; }
   tr.source.row-ok   td:first-child { border-left-color: rgba(74,222,128,0.45); }
   tr.source.row-warn td:first-child { border-left-color: rgba(250,204,21,0.45); }
   tr.source.row-crit td:first-child { border-left-color: rgba(248,113,113,0.45); }
   tr.source.row-err  td:first-child { border-left-color: rgba(148,163,184,0.3); }
 
-  /* group member name: subdued to let the group header carry visual weight */
+  /* 分组成员名称样式 */
   tr.source.in-group td:first-child { padding-left: 24px; color: #b0b0c8; font-size: 13px; }
 
   .alert-hint { font-size: 11px; color: var(--dim); margin-left: 6px; }
   .error-msg { font-size: 11px; color: var(--err); }
 
-  /* ── Empty / loading ─────────────────────────────────── */
+  /* ── 空状态 / 加载中 ─────────────────────────────────── */
   .placeholder {
     text-align: center;
     padding: 60px 24px;
@@ -237,7 +236,7 @@
     font-size: 14px;
   }
 
-  /* ── responsive ──────────────────────────────────────── */
+  /* ── 响应式 ──────────────────────────────────────────── */
   @media (max-width: 700px) {
     header, .summary, .controls, .table-wrap { padding-left: 12px; padding-right: 12px; }
     th:nth-child(3), td:nth-child(3),
@@ -251,7 +250,7 @@
 <body>
 
 <header>
-  <h1>Thermal Monitor</h1>
+  <h1>温度监控</h1>
   <div class="meta">
     <span><span class="dot" id="statusDot"></span> <span id="statusText"></span></span>
     <span id="tsText"></span>
@@ -261,20 +260,20 @@
 <div class="summary" id="summary"></div>
 
 <div class="controls">
-  <label>Refresh
+  <label>刷新间隔
     <select id="refreshInterval">
-      <option value="10">10 s</option>
-      <option value="30">30 s</option>
-      <option value="60" selected>60 s</option>
-      <option value="120">2 min</option>
-      <option value="300">5 min</option>
-      <option value="0">off</option>
+      <option value="10">10 秒</option>
+      <option value="30">30 秒</option>
+      <option value="60" selected>60 秒</option>
+      <option value="120">2 分钟</option>
+      <option value="300">5 分钟</option>
+      <option value="0">关闭</option>
     </select>
   </label>
-  <label>JSON
+  <label>JSON 文件
     <input type="text" id="jsonPath" value="readings.json" size="20">
   </label>
-  <button id="refreshBtn">Refresh now</button>
+  <button id="refreshBtn">立即刷新</button>
   <span id="countdown"></span>
 </div>
 
@@ -282,20 +281,20 @@
   <table>
     <thead>
       <tr>
-        <th id="sort-name">Source</th>
-        <th id="sort-temp">Temp</th>
-        <th id="sort-warn">Warn</th>
-        <th id="sort-crit">Crit</th>
-        <th id="sort-status">Status</th>
+        <th id="sort-name">数据源</th>
+        <th id="sort-temp">温度</th>
+        <th id="sort-warn">警告阈值</th>
+        <th id="sort-crit">严重阈值</th>
+        <th id="sort-status">状态</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
-  <div class="placeholder" id="placeholder">Loading&hellip;</div>
+  <div class="placeholder" id="placeholder">加载中&hellip;</div>
 </div>
 
 <script src="translations.js"></script>
-<script>window.TM_LOCALE = "en";</script>
+<script>window.TM_LOCALE = "zh";</script>
 <script src="thermal_monitor.js"></script>
 </body>
 </html>
