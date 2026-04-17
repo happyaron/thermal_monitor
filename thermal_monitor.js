@@ -32,6 +32,7 @@
   let timer = null;
   let nextFetch = 0;
   let expanded = new Set();
+  let userCollapsed = new Set();
   let collapsedGroups = new Set();
   let expandedGroups  = new Set();
   let sortCol = "name";
@@ -212,7 +213,9 @@
       if (grp && collapsedGroups.has(grp)) continue;
 
       const isNonOk    = (statusOrd[src.status] ?? 0) > 0;
-      const isExp      = expanded.has(src.name) || isNonOk;
+      if (isNonOk && !userCollapsed.has(src.name)) expanded.add(src.name);
+      if (!isNonOk) { expanded.delete(src.name); userCollapsed.delete(src.name); }
+      const isExp      = expanded.has(src.name);
       const cls        = statusCls[src.status];
       const hasDetail  = src.sensors.length > 0;
       const expandable = hasDetail ? "expandable" : "";
@@ -267,13 +270,6 @@
 
     $tbody.innerHTML = rows.join("");
     $placeholder.style.display = rows.length ? "none" : "";
-
-    if (expanded.size === 0 && data.sources.some(s => s.status !== "OK")) {
-      for (const src of data.sources) {
-        if (src.status !== "OK") expanded.add(src.name);
-      }
-      render();
-    }
   }
 
   function esc(s) {
@@ -335,8 +331,13 @@
     const row = e.target.closest("tr.source.expandable");
     if (!row) return;
     const name = row.dataset.src;
-    if (expanded.has(name)) expanded.delete(name);
-    else expanded.add(name);
+    if (expanded.has(name)) {
+      expanded.delete(name);
+      userCollapsed.add(name);
+    } else {
+      expanded.add(name);
+      userCollapsed.delete(name);
+    }
     render();
   });
 
