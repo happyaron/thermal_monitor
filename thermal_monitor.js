@@ -257,7 +257,7 @@
           const stCls  = tempClass(sn.status);
           const errMsg = sn.error ? ` <span class="error-msg">${esc(sn.error)}</span>` : "";
           rows.push(
-            `<tr class="sensor">` +
+            `<tr class="sensor row-${sCls}">` +
             `<td>${esc(sn.name)}</td>` +
             `<td class="${stCls}">${sv}</td>` +
             `<td>${sn.warn.toFixed(0)}\u00b0</td>` +

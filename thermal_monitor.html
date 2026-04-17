@@ -135,6 +135,10 @@
     text-overflow: ellipsis;
   }
   tr.source:hover td { background: rgba(255,255,255,0.03); }
+  tr.source.row-warn td { background: rgba(250,204,21,0.05); }
+  tr.source.row-crit td { background: rgba(248,113,113,0.07); }
+  tr.source.row-warn:hover td { background: rgba(250,204,21,0.09); }
+  tr.source.row-crit:hover td { background: rgba(248,113,113,0.11); }
   tr.source.expandable { cursor: pointer; }
 
   /* group header row — same column grid as data rows */
@@ -153,11 +157,15 @@
     text-overflow: ellipsis;
   }
   tr.group-header:hover td { background: rgba(15, 52, 96, 0.7); }
+  tr.group-header.row-warn td { background: rgba(250,204,21,0.10); }
+  tr.group-header.row-crit td { background: rgba(248,113,113,0.13); }
+  tr.group-header.row-warn:hover td { background: rgba(250,204,21,0.15); }
+  tr.group-header.row-crit:hover td { background: rgba(248,113,113,0.18); }
   tr.group-header:first-child td { border-top: none; }
   /* left-border accent on group headers (same palette as source rows) */
   tr.group-header.row-ok   td:first-child { border-left: 3px solid rgba(74,222,128,0.6); }
-  tr.group-header.row-warn td:first-child { border-left: 3px solid rgba(250,204,21,0.6); }
-  tr.group-header.row-crit td:first-child { border-left: 3px solid rgba(248,113,113,0.6); }
+  tr.group-header.row-warn td:first-child { border-left: 3px solid rgba(250,204,21,0.8); }
+  tr.group-header.row-crit td:first-child { border-left: 3px solid rgba(248,113,113,0.9); }
   tr.group-header.row-err  td:first-child { border-left: 3px solid rgba(148,163,184,0.4); }
   .group-toggle {
     display: inline-block;
@@ -184,6 +192,10 @@
   }
   tr.sensor td:first-child { padding-left: 36px; }
   tr.sensor:last-of-type td { border-bottom: 1px solid var(--border); }
+  tr.sensor.row-warn td { background: rgba(250,204,21,0.04); }
+  tr.sensor.row-crit td { background: rgba(248,113,113,0.06); }
+  tr.sensor.row-warn td:first-child { color: var(--warn); }
+  tr.sensor.row-crit td:first-child { color: var(--crit); }
 
   /* status badges */
   .badge {
@@ -219,8 +231,8 @@
   /* colored left-border accent for all source rows */
   tr.source td:first-child { border-left: 3px solid transparent; }
   tr.source.row-ok   td:first-child { border-left-color: rgba(74,222,128,0.45); }
-  tr.source.row-warn td:first-child { border-left-color: rgba(250,204,21,0.45); }
-  tr.source.row-crit td:first-child { border-left-color: rgba(248,113,113,0.45); }
+  tr.source.row-warn td:first-child { border-left-color: rgba(250,204,21,0.75); }
+  tr.source.row-crit td:first-child { border-left-color: rgba(248,113,113,0.85); }
   tr.source.row-err  td:first-child { border-left-color: rgba(148,163,184,0.3); }
 
   /* group member name: subdued to let the group header carry visual weight */
